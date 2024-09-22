@@ -6,6 +6,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properly
 import { fileURLToPath } from 'url';
+import { google } from 'googleapis';
+
 
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
@@ -92,6 +94,44 @@ router.post('/download', async (req, res) => {
       res.status(500).json({ error: 'Error processing video' });
     }
   });
+
+
+  // Endpoint to fetch videos from a specific playlist
+router.get('/playlist/:playlistId/videos', async (req, res) => {
+    const { playlistId } = req.params;
+    console.log(playlistId);
+    
+    try {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({
+        access_token: req.user.accessToken,
+        refresh_token: req.user.refreshToken,
+      });
+  
+      const youtube = google.youtube({
+        version: 'v3',
+        auth: oauth2Client,
+      });
+  
+      const response = await youtube.playlistItems.list({
+        part: 'snippet,contentDetails',
+        maxResults: 50,
+        playlistId,
+      });
+  
+      const videos = response.data.items.map((item) => ({
+        id: item.contentDetails.videoId,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails.default.url,
+      }));
+  
+      res.json({ videos });
+    } catch (err) {
+      console.error('Error fetching videos from playlist:', err);
+      res.status(500).json({ error: 'Error fetching videos' });
+    }
+  });
+  
   
   
   // Helper function to sanitize file names
