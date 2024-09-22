@@ -27,15 +27,31 @@ function VideoDownloader() {
         throw new Error('Failed to download video');
       }
 
-      // Download the file
+      // Extract the filename from the Content-Disposition header
+      const contentDisposition = response.headers.get('content-disposition');
+      console.log('Content-Disposition Header:', contentDisposition);
+      
+      let filename = 'downloaded_video.mp4'; // Default filename
+
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="(.+)"/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      // Create a blob from the response and download it
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      a.download = `${videoUrl}.mp4`;
+      a.download = filename; // Set the correct filename here
       document.body.appendChild(a);
       a.click();
       a.remove();
+
+      // Clean up the URL object
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error('Error downloading video:', err);
       setError('Error downloading video');

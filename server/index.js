@@ -32,7 +32,10 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: 'http://localhost:3000', // React app URL
+  origin: 'http://localhost:3000', // Your React app's URL
+  methods: 'GET,POST',
+  allowedHeaders: ['Content-Type', 'Content-Disposition'],
+  exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
   credentials: true,
 }));
 

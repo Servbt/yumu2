@@ -18,22 +18,27 @@ const downloadDir = path.join(__dirname, 'downloads');
 // Endpoint to handle video download requests
 router.post('/download', async (req, res) => {
     const { videoUrl } = req.body; // The URL will be sent in the POST request
-    console.log(videoUrl);
-    
+    console.log('Received video URL:', videoUrl);
+      
     if (!videoUrl || !ytdl.validateURL(videoUrl)) {
-        return res.status(400).json({ error: 'Invalid YouTube URL' });
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
-    
+  
     try {
-        if (!fs.existsSync(downloadDir)) {
-            fs.mkdirSync(downloadDir);
-          }
       // Get video information
       const info = await ytdl.getBasicInfo(videoUrl);
-      const videoTitle = sanitizeFileName(info.videoDetails.title);
-      const videoFilePath = path.join(__dirname, `${videoTitle}_video.mp4`);
-      const audioFilePath = path.join(__dirname, `${videoTitle}_audio.m4a`);
-      const outputFilePath = path.join(__dirname, `${videoTitle}.mp4`);
+      const videoTitle = sanitizeFileName(info.videoDetails.title); // Sanitize the title for file name use
+  
+      const downloadDir = path.join(__dirname, 'downloads');
+  
+      // Ensure the downloads directory exists
+      if (!fs.existsSync(downloadDir)) {
+        fs.mkdirSync(downloadDir);
+      }
+  
+      const videoFilePath = path.join(downloadDir, `${videoTitle}_video.mp4`);
+      const audioFilePath = path.join(downloadDir, `${videoTitle}_audio.m4a`);
+      const outputFilePath = path.join(downloadDir, `${videoTitle}.mp4`);
   
       // Download video-only stream
       const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
@@ -73,7 +78,7 @@ router.post('/download', async (req, res) => {
           .run();
       });
   
-      // Send the merged file as a download
+      // Send the merged file as a download with the video title in the filename
       res.download(outputFilePath, `${videoTitle}.mp4`, (err) => {
         if (err) {
           console.error('Error sending file:', err);
@@ -87,6 +92,7 @@ router.post('/download', async (req, res) => {
       res.status(500).json({ error: 'Error processing video' });
     }
   });
+  
   
   // Helper function to sanitize file names
   function sanitizeFileName(fileName) {
