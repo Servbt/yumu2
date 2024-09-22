@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import VideoDownloader from './components/video-downloader';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -25,7 +26,7 @@ function App() {
       {isAuthenticated ? (
         <Playlists />
       ) : (
-        <button onClick={handleLogin}>Login with Google</button>
+        <><button onClick={handleLogin}>Login with Google</button><VideoDownloader /></>
       )}
     </div>
   );

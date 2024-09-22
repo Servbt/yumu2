@@ -9,11 +9,14 @@ import session from "express-session";
 import env from "dotenv";
 import { google } from 'googleapis';
 import cors from 'cors';
+import userRoutes from './routes/userRoutes.js';
+
 
 const app = express();
 const port = process.env.PORT || 5000;
 const saltRounds = 10;
 env.config();
+app.use(express.json());
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -47,6 +50,10 @@ const db = new pg.Client({
   port: process.env.PG_PORT,
 });
 db.connect();
+
+// for download routes
+app.use('/api', userRoutes);
+
 
 //  solely checks authentication
 app.get('/api/authenticated', (req, res) => {
