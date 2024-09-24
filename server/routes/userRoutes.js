@@ -97,7 +97,7 @@ router.post('/download', async (req, res) => {
 
 
 
-// Endpoint to fetch videos from a specific playlist
+// Endpoint to fetch all videos from a specific playlist
 router.get('/playlist/:playlistId/videos', async (req, res) => {
   const { playlistId } = req.params;
   try {
@@ -112,31 +112,45 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
       auth: oauth2Client,
     });
 
-    const response = await youtube.playlistItems.list({
-      part: 'snippet,contentDetails',
-      maxResults: 50,
-      playlistId,
-    });
+    let allVideos = [];
+    let nextPageToken = null;
 
-    // Map video details while handling potential missing data
-    const videos = response.data.items.map((item) => {
-      const videoId = item.contentDetails?.videoId;
-      const title = item.snippet?.title || 'Untitled Video';
-      const thumbnail = item.snippet?.thumbnails?.default?.url || '';
+    // Loop to fetch all pages
+    do {
+      const response = await youtube.playlistItems.list({
+        part: 'snippet,contentDetails',
+        maxResults: 50, // Fetch 50 items per request (max allowed)
+        playlistId,
+        pageToken: nextPageToken, // Use the nextPageToken to fetch the next page
+      });
 
-      return {
-        id: videoId,
-        title,
-        thumbnail,
-      };
-    }).filter(video => video.id); // Filter out videos that don't have a valid video ID
+      // Map video details while handling potential missing data
+      const videos = response.data.items.map((item) => {
+        const videoId = item.contentDetails?.videoId;
+        const title = item.snippet?.title || 'Untitled Video';
+        const thumbnail = item.snippet?.thumbnails?.default?.url || '';
 
-    res.json({ videos });
+        return {
+          id: videoId,
+          title,
+          thumbnail,
+        };
+      }).filter(video => video.id); // Filter out videos without a valid video ID
+
+      // Add videos to the overall list
+      allVideos = allVideos.concat(videos);
+
+      // Get the nextPageToken for the next request
+      nextPageToken = response.data.nextPageToken;
+    } while (nextPageToken);
+
+    res.json({ videos: allVideos });
   } catch (err) {
     console.error('Error fetching videos from playlist:', err);
     res.status(500).json({ error: 'Error fetching videos' });
   }
 });
+
 
 
 
