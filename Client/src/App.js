@@ -36,7 +36,7 @@ function Playlists() {
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [videos, setVideos] = useState([]);
-  
+
   useEffect(() => {
     fetch('/api/playlists', {
       credentials: 'include',
@@ -78,35 +78,44 @@ function Playlists() {
         setVideos([]); // Set an empty array in case of error
       });
   };
-  
-  const downloadVideo = (videoId) => {
+
+  const downloadVideo = (videoId, videoTitle) => {
+    if (!videoId || !videoTitle) {
+      console.error('Invalid video ID or title:', videoId, videoTitle);
+      return;
+    }
+
     fetch(`/api/download`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}` }),
+      body: JSON.stringify({
+        videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        videoTitle // Pass the video title to the backend
+      }),
     })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Failed to download video');
-      }
-      return response.blob();
-    })
-    .then(blob => {
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `${videoId}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    })
-    .catch(error => {
-      console.error('Error downloading video:', error);
-    });
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to download video');
+        }
+        return response.blob();
+      })
+      .then(blob => {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${videoTitle}.mp4`; // Use the video title for the filename
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      })
+      .catch(error => {
+        console.error('Error downloading video:', error);
+      });
   };
+
 
   return (
     <div>
@@ -127,23 +136,38 @@ function Playlists() {
       </ul>
 
       {selectedPlaylist && (
-  <div>
-    <h2>Videos in Playlist</h2>
-    {videos.length > 0 ? (
-      <ul>
-        {videos.map(video => (
-          <li key={video.id}>
-            <h3>{video.title}</h3>
-            <img src={video.thumbnail} alt={`${video.title} Thumbnail`} />
-            <button onClick={() => downloadVideo(video.id)}>Download Video</button>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p>No videos available in this playlist.</p>
-    )}
-  </div>
-)}
+        <div>
+          <h2>Videos in Playlist</h2>
+          {videos.length > 0 ? (
+            <ul>
+              {videos.map(video => (
+                <li key={video.id}>
+                  <h3>{video.title}</h3>
+                  {video.thumbnail ? (
+                    <img src={video.thumbnail} alt={`${video.title} Thumbnail`} />
+                  ) : (
+                    <p>No thumbnail available</p>
+                  )}
+                  {/* Disable the download button if video ID is not available */}
+                  <button
+                    onClick={() => downloadVideo(video.id, video.title)}
+                    disabled={!video.id || !video.thumbnail}
+                    style={{ opacity: !video.id || !video.thumbnail ? 0.5 : 1, cursor: !video.id || !video.thumbnail ? 'not-allowed' : 'pointer' }}
+                  >
+                    {video.id ? 'Download Video' : 'Unavailable'}
+                  </button>
+
+
+                </li>
+              ))}
+
+
+            </ul>
+          ) : (
+            <p>No videos available in this playlist.</p>
+          )}
+        </div>
+      )}
 
     </div>
   );
