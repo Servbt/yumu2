@@ -121,52 +121,44 @@ function Playlists() {
     if (videos.length === 0) return;
   
     setIsDownloadingAll(true);
-    let skippedVideos = []; // Array to track skipped videos
   
-    for (const video of videos) {
-      try {
-        const response = await fetch('/api/download', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
-            videoTitle: video.title,
-          }),
-        });
+    try {
+      // Prepare the data to send to the backend
+      const videoData = videos.map(video => ({
+        videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        videoTitle: video.title,
+      }));
   
-        if (!response.ok) {
-          throw new Error(`Failed to download video: ${video.title}`);
-        }
+      const response = await fetch('/api/download-zip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videos: videoData }), // Ensure we're sending the array correctly
+      });
   
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `${video.title}.mp4`; // Use the video title for the filename
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-  
-      } catch (error) {
-        console.error('Error downloading video:', error);
-        skippedVideos.push(video.title); // Add the failed video to the skipped list
+      if (!response.ok) {
+        throw new Error('Failed to download ZIP file');
       }
-    }
   
-    setIsDownloadingAll(false);
-  
-    // Notify the user of any skipped videos
-    if (skippedVideos.length > 0) {
-      alert(`The following videos could not be downloaded:\n${skippedVideos.join('\n')}`);
-    } else {
-      alert('All videos downloaded successfully!');
+      // Download the ZIP file
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = 'playlist_videos.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error downloading ZIP file:', error);
+    } finally {
+      setIsDownloadingAll(false);
     }
   };
   
-
+  
   return (
     <div>
       <h1>Your YouTube Playlists</h1>

@@ -2,11 +2,14 @@
 import express from "express";
 import fs from 'fs';
 import ytdl from '@distube/ytdl-core';
+const { UnrecoverableError } = ytdl; // Extract UnrecoverableError from the default export
+
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properly
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
+import archiver from "archiver";
 
 
 const router = express.Router();
@@ -173,10 +176,146 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
 
 
 
+// Endpoint to handle multiple video downloads and return them as a ZIP file
+router.post('/download-zip', async (req, res) => {
+  const { videos } = req.body; // videos is an array of { videoUrl, videoTitle }
+  console.log('Received videos:', videos);
+
+  if (!videos || !Array.isArray(videos) || videos.length === 0) {
+    return res.status(400).json({ error: 'No videos provided for download.' });
+  }
+
+  try {
+    const downloadDir = path.join(__dirname, 'downloads');
+    if (!fs.existsSync(downloadDir)) {
+      fs.mkdirSync(downloadDir);
+    }
+
+    const downloadedFiles = [];
+    const skippedVideos = [];
+
+    for (const video of videos) {
+      const { videoUrl, videoTitle } = video;
+      console.log(`Processing video: ${videoTitle}`);
+
+      try {
+        const sanitizedTitle = sanitizeFileName(videoTitle);
+        const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
+        const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
+        const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
+
+        const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
+        const videoFile = fs.createWriteStream(videoFilePath);
+
+        videoStream.on('error', (error) => {
+          if (error && (error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
+            console.warn(`Skipping unavailable video: ${videoTitle}`);
+            skippedVideos.push(videoTitle);
+            videoFile.close();
+            if (fs.existsSync(videoFilePath)) {
+              fs.unlinkSync(videoFilePath);
+            }
+            return;
+          } else {
+            console.error(`Error downloading video stream for ${videoTitle}:`, error);
+            throw error; // Propagate other errors
+          }
+        });
+
+        videoStream.pipe(videoFile);
+
+        await new Promise((resolve, reject) => {
+          videoFile.on('finish', resolve);
+          videoFile.on('error', reject);
+        });
+
+        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
+        const audioFile = fs.createWriteStream(audioFilePath);
+
+        audioStream.on('error', (error) => {
+          if (error && (error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
+            console.warn(`Skipping unavailable audio for video: ${videoTitle}`);
+            skippedVideos.push(videoTitle);
+            audioFile.close();
+            if (fs.existsSync(audioFilePath)) {
+              fs.unlinkSync(audioFilePath);
+            }
+            return;
+          } else {
+            console.error(`Error downloading audio stream for ${videoTitle}:`, error);
+            throw error; // Propagate other errors
+          }
+        });
+
+        audioStream.pipe(audioFile);
+
+        await new Promise((resolve, reject) => {
+          audioFile.on('finish', resolve);
+          audioFile.on('error', reject);
+        });
+
+        await new Promise((resolve, reject) => {
+          ffmpeg()
+            .input(videoFilePath)
+            .input(audioFilePath)
+            .output(outputFilePath)
+            .videoCodec('copy')
+            .audioCodec('aac')
+            .on('end', () => {
+              fs.unlinkSync(videoFilePath);
+              fs.unlinkSync(audioFilePath);
+              downloadedFiles.push({ path: outputFilePath, name: `${sanitizedTitle}.mp4` });
+              resolve();
+            })
+            .on('error', reject)
+            .run();
+        });
+      } catch (err) {
+        if (err && (err.message.includes('This video is unavailable') || err.message.includes('Video unavailable'))) {
+          console.warn(`Skipping unavailable video: ${videoTitle}`);
+          skippedVideos.push(videoTitle);
+        } else {
+          console.error(`Error processing video "${videoTitle}":`, err);
+        }
+        continue; // Skip to the next video
+      }
+    }
+
+    const zipFilePath = path.join(downloadDir, `playlist_videos.zip`);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
+    res.setHeader('Content-Type', 'application/zip');
+
+    archive.pipe(res);
+
+    for (const file of downloadedFiles) {
+      archive.file(file.path, { name: file.name });
+    }
+
+    archive.finalize();
+
+    archive.on('end', () => {
+      downloadedFiles.forEach(file => fs.unlinkSync(file.path));
+      if (skippedVideos.length > 0) {
+        console.warn(`Skipped videos: ${skippedVideos.join(', ')}`);
+      }
+    });
+
+  } catch (err) {
+    console.error('Error processing playlist:', err);
+    res.status(500).json({ error: 'An error occurred while processing the playlist.' });
+  }
+});
+
 
 // Helper function to sanitize file names
 function sanitizeFileName(fileName) {
-  return fileName.replace(/[^a-z0-9\-\. ]/gi, ' ');
+  if (!fileName) {
+    return 'untitled'; // Fallback to a default name if fileName is undefined or null
+  }
+  return fileName.replace(/[^a-z0-9\-\. ]/gi, ' '); // Replace illegal characters with spaces
 }
+
 
 export default router;
