@@ -123,18 +123,12 @@ function Playlists() {
     setIsDownloadingAll(true);
   
     try {
-      // Prepare the data to send to the backend
-      const videoData = videos.map(video => ({
-        videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
-        videoTitle: video.title,
-      }));
-  
       const response = await fetch('/api/download-zip', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ videos: videoData }), // Ensure we're sending the array correctly
+        body: JSON.stringify({ videos: videos.map(video => ({ videoUrl: `https://www.youtube.com/watch?v=${video.id}`, videoTitle: video.title })) }),
       });
   
       if (!response.ok) {
@@ -151,12 +145,24 @@ function Playlists() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
+  
+      // Fetch skipped videos after the download is complete
+      const skippedResponse = await fetch('/api/skipped-videos');
+      const skippedData = await skippedResponse.json();
+      const { skippedVideos } = skippedData;
+  
+      if (skippedVideos && skippedVideos.length > 0) {
+        alert(`The following videos could not be downloaded:\n${skippedVideos.join('\n')}`);
+      } else {
+        alert('All videos downloaded successfully!');
+      }
     } catch (error) {
       console.error('Error downloading ZIP file:', error);
     } finally {
       setIsDownloadingAll(false);
     }
   };
+  
   
   
   return (

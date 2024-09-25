@@ -176,9 +176,11 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
 
 
 
-// Endpoint to handle multiple video downloads and return them as a ZIP file
+// Variable to store skipped videos temporarily
+let skippedVideos = [];
+
 router.post('/download-zip', async (req, res) => {
-  const { videos } = req.body; // videos is an array of { videoUrl, videoTitle }
+  const { videos } = req.body;
   console.log('Received videos:', videos);
 
   if (!videos || !Array.isArray(videos) || videos.length === 0) {
@@ -192,24 +194,26 @@ router.post('/download-zip', async (req, res) => {
     }
 
     const downloadedFiles = [];
-    const skippedVideos = [];
+    skippedVideos = []; // Reset skippedVideos for this request
 
     for (const video of videos) {
       const { videoUrl, videoTitle } = video;
       console.log(`Processing video: ${videoTitle}`);
-
+    
       try {
         const sanitizedTitle = sanitizeFileName(videoTitle);
         const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
         const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
         const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-
+    
+        // Download video-only stream
         const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
         const videoFile = fs.createWriteStream(videoFilePath);
-
+    
         videoStream.on('error', (error) => {
-          if (error && (error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable video: ${videoTitle}`);
+          // Check if error is a 401 (Unauthorized) error or other unrecoverable errors
+          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
+            console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
             skippedVideos.push(videoTitle);
             videoFile.close();
             if (fs.existsSync(videoFilePath)) {
@@ -221,20 +225,21 @@ router.post('/download-zip', async (req, res) => {
             throw error; // Propagate other errors
           }
         });
-
+    
         videoStream.pipe(videoFile);
-
+    
         await new Promise((resolve, reject) => {
           videoFile.on('finish', resolve);
           videoFile.on('error', reject);
         });
-
+    
+        // Download audio-only stream
         const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
         const audioFile = fs.createWriteStream(audioFilePath);
-
+    
         audioStream.on('error', (error) => {
-          if (error && (error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable audio for video: ${videoTitle}`);
+          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
+            console.warn(`Skipping unavailable or unauthorized audio for video: ${videoTitle}`);
             skippedVideos.push(videoTitle);
             audioFile.close();
             if (fs.existsSync(audioFilePath)) {
@@ -246,14 +251,15 @@ router.post('/download-zip', async (req, res) => {
             throw error; // Propagate other errors
           }
         });
-
+    
         audioStream.pipe(audioFile);
-
+    
         await new Promise((resolve, reject) => {
           audioFile.on('finish', resolve);
           audioFile.on('error', reject);
         });
-
+    
+        // Merge video and audio using ffmpeg
         await new Promise((resolve, reject) => {
           ffmpeg()
             .input(videoFilePath)
@@ -270,9 +276,11 @@ router.post('/download-zip', async (req, res) => {
             .on('error', reject)
             .run();
         });
+    
       } catch (err) {
-        if (err && (err.message.includes('This video is unavailable') || err.message.includes('Video unavailable'))) {
-          console.warn(`Skipping unavailable video: ${videoTitle}`);
+        // Additional error handling if needed
+        if (err && (err.statusCode === 401 || err.message.includes('This video is unavailable') || err.message.includes('Video unavailable'))) {
+          console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
           skippedVideos.push(videoTitle);
         } else {
           console.error(`Error processing video "${videoTitle}":`, err);
@@ -280,32 +288,35 @@ router.post('/download-zip', async (req, res) => {
         continue; // Skip to the next video
       }
     }
+    
 
     const zipFilePath = path.join(downloadDir, `playlist_videos.zip`);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+     // Create a ZIP archive of the downloaded files
+     const archive = archiver('zip', { zlib: { level: 9 } });
+     res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
+     res.setHeader('Content-Type', 'application/zip');
+ 
+     archive.pipe(res);
+ 
+     for (const file of downloadedFiles) {
+       archive.file(file.path, { name: file.name });
+     }
+ 
+     archive.finalize();
+ 
+     // Clean up downloaded files after sending the ZIP file
+     archive.on('end', () => {
+       downloadedFiles.forEach(file => fs.unlinkSync(file.path));
+     });
+   } catch (err) {
+     console.error('Error processing playlist:', err);
+     res.status(500).json({ error: 'An error occurred while processing the playlist.' });
+   }
+ });
 
-    res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
-    res.setHeader('Content-Type', 'application/zip');
-
-    archive.pipe(res);
-
-    for (const file of downloadedFiles) {
-      archive.file(file.path, { name: file.name });
-    }
-
-    archive.finalize();
-
-    archive.on('end', () => {
-      downloadedFiles.forEach(file => fs.unlinkSync(file.path));
-      if (skippedVideos.length > 0) {
-        console.warn(`Skipped videos: ${skippedVideos.join(', ')}`);
-      }
-    });
-
-  } catch (err) {
-    console.error('Error processing playlist:', err);
-    res.status(500).json({ error: 'An error occurred while processing the playlist.' });
-  }
+ // Endpoint to retrieve skipped videos
+router.get('/skipped-videos', (req, res) => {
+  res.json({ skippedVideos });
 });
 
 
