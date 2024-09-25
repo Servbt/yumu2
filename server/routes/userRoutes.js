@@ -18,17 +18,17 @@ const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
 // Endpoint to handle video download requests
-router.post('/download', async (req, res) => {
-  const { videoUrl, videoTitle } = req.body; // Retrieve videoTitle from the request body
+router.post('/download', async (req, res, next) => {
+  const { videoUrl, videoTitle } = req.body;
   console.log('Received video URL:', videoUrl);
   console.log('Received video title:', videoTitle);
-    
+
   if (!videoUrl || !ytdl.validateURL(videoUrl)) {
     return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
 
   try {
-    // Sanitize the video title to create a safe filename
+    // Sanitize the video title for a valid filename
     const sanitizedTitle = sanitizeFileName(videoTitle);
     const downloadDir = path.join(__dirname, 'downloads');
 
@@ -40,10 +40,18 @@ router.post('/download', async (req, res) => {
     const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
     const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
     const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-    
+
     // Download video-only stream
     const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
     const videoFile = fs.createWriteStream(videoFilePath);
+
+    videoStream.on('error', (error) => {
+      console.error('Error downloading video stream:', error.message);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
+      }
+    });
+
     videoStream.pipe(videoFile);
 
     await new Promise((resolve, reject) => {
@@ -54,6 +62,14 @@ router.post('/download', async (req, res) => {
     // Download audio-only stream
     const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
     const audioFile = fs.createWriteStream(audioFilePath);
+
+    audioStream.on('error', (error) => {
+      console.error('Error downloading audio stream:', error.message);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: `Failed to download audio stream: ${videoTitle}` });
+      }
+    });
+
     audioStream.pipe(audioFile);
 
     await new Promise((resolve, reject) => {
@@ -75,7 +91,10 @@ router.post('/download', async (req, res) => {
           fs.unlinkSync(audioFilePath);
           resolve();
         })
-        .on('error', reject)
+        .on('error', (err) => {
+          console.error('Error merging video and audio:', err);
+          reject(new Error('Error merging video and audio'));
+        })
         .run();
     });
 
@@ -84,17 +103,18 @@ router.post('/download', async (req, res) => {
     res.download(outputFilePath, (err) => {
       if (err) {
         console.error('Error sending file:', err);
-        return res.status(500).json({ error: 'Error downloading file' });
+        return next(err); // Pass the error to the global error handler
       }
       // Optionally delete the file after download
       fs.unlinkSync(outputFilePath);
     });
   } catch (err) {
     console.error('Error processing video:', err);
-    res.status(500).json({ error: 'Error processing video' });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
+    }
   }
 });
-
 
 
 // Endpoint to fetch all videos from a specific playlist
