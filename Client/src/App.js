@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import VideoDownloader from './components/video-downloader';
+// import VideoDownloader from './components/video-downloader';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -23,11 +25,25 @@ function App() {
 
   return (
     <div>
-      {isAuthenticated ? (
-        <Playlists />
-      ) : (
-        <><button onClick={handleLogin}>Login with Google</button><VideoDownloader /></>
-      )}
+      {/* <nav className="navbar navbar-expand-lg ">
+        <a className="navbar-brand" href="/">Yumu</a>
+      </nav> */}
+      <div className="container mt-5">
+        {isAuthenticated ? (
+          <Playlists />
+        ) : (
+          <div className="hero">
+            <h1>Yumu</h1>
+            <p>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
+            <button className="login-button" onClick={handleLogin}>
+              Login with Google
+            </button>
+          </div>
+        )}
+      </div>
+      <footer>
+        <p>© 2024 Yumu. All rights reserved.</p>
+      </footer>
     </div>
   );
 }
@@ -166,60 +182,75 @@ function Playlists() {
   
   
   return (
-    <div>
-      <h1>Your YouTube Playlists</h1>
-      <ul>
-        {playlists.map(playlist => (
-          <li key={playlist.id}>
-            <h2>{playlist.title}</h2>
-            {playlist.thumbnails && playlist.thumbnails.default && (
-              <img
-                src={playlist.thumbnails.default.url}
-                alt={`${playlist.title} Thumbnail`}
-              />
-            )}
-            <button onClick={() => fetchVideos(playlist.id)}>View Videos</button>
-          </li>
-        ))}
-      </ul>
-
-      {selectedPlaylist && (
-        <div>
-          <h2>Videos in Playlist</h2>
-          <button onClick={downloadAllVideos} disabled={isDownloadingAll}>
-            {isDownloadingAll ? 'Downloading...' : 'Download All Videos'}
-          </button>
-          {videos.length > 0 ? (
-            <ul>
-              {videos.map(video => (
-                <li key={video.id}>
-                  <h3>{video.title}</h3>
-                  {video.thumbnail ? (
-                    <img src={video.thumbnail} alt={`${video.title} Thumbnail`} />
-                  ) : (
-                    <p>No thumbnail available</p>
-                  )}
-                  {/* Disable the download button if video ID is not available */}
+    <div className="d-flex flex-row container left-container">
+      {/* Left Section: Playlists */}
+      <div className="playlists-container">
+        <h2 className="mb-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
+        <div className="row">
+          {playlists.map((playlist, index) => (
+            <div
+              key={playlist.id}
+              className={`col-md-4 col-lg-4 mb-4 d-flex align-items-stretch fade-in`}
+              style={{ animationDelay: `${index * 0.1}s`, opacity: playlist.isVisible ? 1 : 0 }}
+            >
+              <div className="card w-100">
+                <img
+                  src={playlist.thumbnails?.high.url}
+                  className="card-img"
+                  alt={`${playlist.title} Thumbnail`}
+                />
+                <div className="card-body">
+                  <h5 className="card-title">{playlist.title}</h5>
                   <button
-                    onClick={() => downloadVideo(video.id, video.title)}
-                    disabled={!video.id || !video.thumbnail}
-                    style={{ opacity: !video.id || !video.thumbnail ? 0.5 : 1, cursor: !video.id || !video.thumbnail ? 'not-allowed' : 'pointer' }}
+                    className="btn card-button mt-2"
+                    onClick={() => fetchVideos(playlist.id)}
                   >
-                    {video.id ? 'Download Video' : 'Unavailable'}
+                    View Playlist
                   </button>
-
-
-                </li>
-              ))}
-
-
-            </ul>
-          ) : (
-            <p>No videos available in this playlist.</p>
-          )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
+      {/* Right Section: Videos in Playlist */}
+      <div className="videos-container">
+        <h2 style={{ color: '#F72585' }}>Videos in Playlist</h2>
+        {selectedPlaylist && videos.length > 0 ? (
+          <>
+            <button
+              className="btn btn-success mb-3"
+              onClick={downloadAllVideos}
+              disabled={isDownloadingAll}
+            >
+              {isDownloadingAll ? 'Downloading...' : 'Download All Videos'}
+            </button>
+            <div className="list-group">
+              {videos.map((video, index) => (
+                <div
+                  key={video.id}
+                  className={`list-group-item d-flex align-items-center fade-in`}
+                  style={{ animationDelay: `${index * 0.1}s`, opacity: video.isVisible ? 1 : 0 }}
+                >
+                  <img
+                    src={video.thumbnail}
+                    alt={`${video.title} Thumbnail`}
+                    className="img-thumbnail mr-3"
+                    style={{ width: '80px' }}
+                  />
+                  <div className="flex-grow-1">{video.title}</div>
+                  <button className="btn btn-primary ml-auto" onClick={() => downloadVideo(video.id, video.title)}>
+                    Download Video
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-center text-muted">Select a playlist to view its videos.</p>
+        )}
+      </div>
     </div>
   );
 }
