@@ -25,19 +25,35 @@ function App() {
 
   return (
     <div>
-      {/* <nav className="navbar navbar-expand-lg ">
-        <a className="navbar-brand" href="/">Yumu</a>
-      </nav> */}
       <div className="container mt-5">
         {isAuthenticated ? (
           <Playlists />
         ) : (
           <div className="hero">
             <h1>Yumu</h1>
-            <p>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
+            <p className='select'>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
             <button className="login-button" onClick={handleLogin}>
               Login with Google
             </button>
+
+            {/* Instructions Section */}
+            <div className="instructions">
+              <h2>How to Use Yumu</h2>
+              <div className="steps select">
+                <div className="step">
+                  <div className="step-number">Step 1:</div>
+                  <div className="step-description">Log in with your Google account.</div>
+                </div>
+                <div className="step">
+                  <div className="step-number">Step 2:</div>
+                  <div className="step-description">Select a playlist you want to download.</div>
+                </div>
+                <div className="step">
+                  <div className="step-number">Step 3:</div>
+                  <div className="step-description">Download your videos (MP4 format only) and enjoy!</div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -185,7 +201,7 @@ function Playlists() {
     <div className="d-flex flex-row container left-container">
       {/* Left Section: Playlists */}
       <div className="playlists-container">
-        <h2 className="mb-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
+        <h2 className="mb-4 mt-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
         <div className="row">
           {playlists.map((playlist, index) => (
             <div
@@ -193,14 +209,14 @@ function Playlists() {
               className={`col-md-4 col-lg-4 mb-4 d-flex align-items-stretch fade-in`}
               style={{ animationDelay: `${index * 0.1}s`, opacity: playlist.isVisible ? 1 : 0 }}
             >
-              <div className="card w-100">
+              <div className="card">
                 <img
                   src={playlist.thumbnails?.high.url}
                   className="card-img"
                   alt={`${playlist.title} Thumbnail`}
                 />
-                <div className="card-body">
-                  <h5 className="card-title">{playlist.title}</h5>
+                <div className="card-body select">
+                  <h5 className="card-title text-center">{playlist.title}</h5>
                   <button
                     className="btn card-button mt-2"
                     onClick={() => fetchVideos(playlist.id)}
@@ -216,7 +232,7 @@ function Playlists() {
 
       {/* Right Section: Videos in Playlist */}
       <div className="videos-container">
-        <h2 style={{ color: '#F72585' }}>Videos in Playlist</h2>
+        <h2 className='row ps-2' style={{ color: '#F72585' }}>Videos in Playlist</h2>
         {selectedPlaylist && videos.length > 0 ? (
           <>
             <button
@@ -239,8 +255,8 @@ function Playlists() {
                     className="img-thumbnail mr-3"
                     style={{ width: '80px' }}
                   />
-                  <div className="flex-grow-1">{video.title}</div>
-                  <button className="btn btn-primary ml-auto" onClick={() => downloadVideo(video.id, video.title)}>
+                  <div className="flex-grow-1 p-2">{video.title}</div>
+                  <button className="btn btn-primary ml-auto col-3" onClick={() => downloadVideo(video.id, video.title)}>
                     Download Video
                   </button>
                 </div>
@@ -248,7 +264,7 @@ function Playlists() {
             </div>
           </>
         ) : (
-          <p className="text-center text-muted">Select a playlist to view its videos.</p>
+          <p className="select">Select a playlist to view its videos.</p>
         )}
       </div>
     </div>
