@@ -10,6 +10,7 @@ import env from "dotenv";
 import { google } from 'googleapis';
 import cors from 'cors';
 import userRoutes from './routes/userRoutes.js';
+import channelRoutes from './routes/channelRoute.js';
 
 
 const app = express();
@@ -56,6 +57,7 @@ db.connect();
 
 // for download routes
 app.use('/api', userRoutes);
+app.use('/channel', channelRoutes);
 
 
 //  solely checks authentication

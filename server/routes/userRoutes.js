@@ -11,10 +11,15 @@ import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
 
+import axios from "axios"; 
+import dotenv from 'dotenv';
+dotenv.config();
+
 
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
 
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,60 +125,51 @@ router.post('/download', async (req, res, next) => {
 });
 
 
-// Endpoint to fetch all videos from a specific playlist
+// Route to fetch videos from a specific playlist
 router.get('/playlist/:playlistId/videos', async (req, res) => {
   const { playlistId } = req.params;
+  let allVideos = [];
+  let nextPageToken = '';
+
   try {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({
-      access_token: req.user.accessToken,
-      refresh_token: req.user.refreshToken,
-    });
+      // Check if OAuth is required or if we're using public API access
+      do {
+          const response = await axios.get(
+              `https://www.googleapis.com/youtube/v3/playlistItems`,
+              {
+                  params: {
+                      part: 'snippet',
+                      playlistId: playlistId,
+                      maxResults: 50, // Fetch up to 50 videos per page
+                      pageToken: nextPageToken,
+                      key: YOUTUBE_API_KEY, // Use your public API key
+                  }
+              }
+          );
 
-    const youtube = google.youtube({
-      version: 'v3',
-      auth: oauth2Client,
-    });
+          if (response.data.items) {
+              const videos = response.data.items.map((item) => ({
+                  id: item.snippet.resourceId.videoId,
+                  title: item.snippet.title,
+                  thumbnail: item.snippet.thumbnails?.default?.url, // Handle missing thumbnails
+              }));
 
-    let allVideos = [];
-    let nextPageToken = null;
+              allVideos = [...allVideos, ...videos];
+          }
 
-    // Loop to fetch all pages
-    do {
-      const response = await youtube.playlistItems.list({
-        part: 'snippet,contentDetails',
-        maxResults: 50, // Fetch 50 items per request (max allowed)
-        playlistId,
-        pageToken: nextPageToken, // Use the nextPageToken to fetch the next page
-      });
+          nextPageToken = response.data.nextPageToken;
+      } while (nextPageToken);
 
-      // Map video details while handling potential missing data
-      const videos = response.data.items.map((item) => {
-        const videoId = item.contentDetails?.videoId;
-        const title = item.snippet?.title || 'Untitled Video';
-        const thumbnail = item.snippet?.thumbnails?.default?.url || '';
-
-        return {
-          id: videoId,
-          title,
-          thumbnail,
-        };
-      }).filter(video => video.id); // Filter out videos without a valid video ID
-
-      // Add videos to the overall list
-      allVideos = allVideos.concat(videos);
-
-      // Get the nextPageToken for the next request
-      nextPageToken = response.data.nextPageToken;
-    } while (nextPageToken);
-
-    res.json({ videos: allVideos });
-  } catch (err) {
-    console.error('Error fetching videos from playlist:', err);
-    res.status(500).json({ error: 'Error fetching videos' });
+      if (allVideos.length > 0) {
+          res.json({ videos: allVideos });
+      } else {
+          res.status(404).json({ error: "No videos found for this playlist." });
+      }
+  } catch (error) {
+      console.error('Error fetching videos:', error);
+      res.status(500).json({ error: 'Failed to fetch videos from the playlist' });
   }
 });
-
 
 
 // Variable to store skipped videos temporarily
