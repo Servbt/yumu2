@@ -25,6 +25,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
+
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
   const { videoUrl, videoTitle } = req.body;
@@ -35,26 +36,29 @@ router.post('/download', async (req, res, next) => {
     return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
 
-  try {
-    // Sanitize the video title for a valid filename
-    const sanitizedTitle = sanitizeFileName(videoTitle);
-    const downloadDir = path.join(__dirname, 'downloads');
+  // Define paths outside of the try block to make them accessible for cleanup
+  const sanitizedTitle = sanitizeFileName(videoTitle);
+  const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
+  const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
+  const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
 
+  let videoFile, audioFile; // Declare variables to hold stream references
+
+  try {
     // Ensure the downloads directory exists
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir);
     }
 
-    const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
-    const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
-    const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-
     // Download video-only stream
     const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
-    const videoFile = fs.createWriteStream(videoFilePath);
+    videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
       console.error('Error downloading video stream:', error.message);
+      videoFile.close(); // Ensure the stream is closed on error
+      cleanUpFile(videoFilePath);
+      cleanUpFile(audioFilePath);
       if (!res.headersSent) {
         return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
       }
@@ -63,16 +67,24 @@ router.post('/download', async (req, res, next) => {
     videoStream.pipe(videoFile);
 
     await new Promise((resolve, reject) => {
-      videoFile.on('finish', resolve);
-      videoFile.on('error', reject);
+      videoFile.on('finish', () => {
+        videoFile.close(resolve); // Ensure the file stream is fully closed
+      });
+      videoFile.on('error', (error) => {
+        cleanUpFile(videoFilePath);
+        reject(error);
+      });
     });
 
     // Download audio-only stream
     const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
-    const audioFile = fs.createWriteStream(audioFilePath);
+    audioFile = fs.createWriteStream(audioFilePath);
 
     audioStream.on('error', (error) => {
       console.error('Error downloading audio stream:', error.message);
+      audioFile.close(); // Ensure the stream is closed on error
+      cleanUpFile(videoFilePath);
+      cleanUpFile(audioFilePath);
       if (!res.headersSent) {
         return res.status(500).json({ error: `Failed to download audio stream: ${videoTitle}` });
       }
@@ -81,8 +93,13 @@ router.post('/download', async (req, res, next) => {
     audioStream.pipe(audioFile);
 
     await new Promise((resolve, reject) => {
-      audioFile.on('finish', resolve);
-      audioFile.on('error', reject);
+      audioFile.on('finish', () => {
+        audioFile.close(resolve); // Ensure the file stream is fully closed
+      });
+      audioFile.on('error', (error) => {
+        cleanUpFile(audioFilePath);
+        reject(error);
+      });
     });
 
     // Merge video and audio using ffmpeg
@@ -95,12 +112,15 @@ router.post('/download', async (req, res, next) => {
         .audioCodec('aac')
         .on('end', () => {
           // Clean up temporary files
-          fs.unlinkSync(videoFilePath);
-          fs.unlinkSync(audioFilePath);
+          cleanUpFile(videoFilePath);
+          cleanUpFile(audioFilePath);
           resolve();
         })
         .on('error', (err) => {
           console.error('Error merging video and audio:', err);
+          cleanUpFile(videoFilePath);
+          cleanUpFile(audioFilePath);
+          cleanUpFile(outputFilePath);
           reject(new Error('Error merging video and audio'));
         })
         .run();
@@ -114,16 +134,22 @@ router.post('/download', async (req, res, next) => {
         return next(err); // Pass the error to the global error handler
       }
       // Optionally delete the file after download
-      fs.unlinkSync(outputFilePath);
+      cleanUpFile(outputFilePath);
     });
   } catch (err) {
     console.error('Error processing video:', err);
+    cleanUpFile(videoFilePath);
+    cleanUpFile(audioFilePath);
+    cleanUpFile(outputFilePath);
     if (!res.headersSent) {
       return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
     }
+  } finally {
+    // Close file streams if they are still open
+    if (videoFile) videoFile.close();
+    if (audioFile) audioFile.close();
   }
 });
-
 
 // Route to fetch videos from a specific playlist
 router.get('/playlist/:playlistId/videos', async (req, res) => {
@@ -205,56 +231,39 @@ router.post('/download-zip', async (req, res) => {
         // Download video-only stream
         const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
         const videoFile = fs.createWriteStream(videoFilePath);
-    
+
         videoStream.on('error', (error) => {
-          // Check if error is a 401 (Unauthorized) error or other unrecoverable errors
-          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
-            skippedVideos.push(videoTitle);
-            videoFile.close();
-            if (fs.existsSync(videoFilePath)) {
-              fs.unlinkSync(videoFilePath);
-            }
-            return;
-          } else {
-            console.error(`Error downloading video stream for ${videoTitle}:`, error);
-            throw error; // Propagate other errors
-          }
+          console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
+          skippedVideos.push(videoTitle);
+          videoFile.close();
+          cleanUpFile(videoFilePath);
+          return;
         });
-    
+
         videoStream.pipe(videoFile);
-    
         await new Promise((resolve, reject) => {
           videoFile.on('finish', resolve);
           videoFile.on('error', reject);
         });
-    
+
         // Download audio-only stream
         const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
         const audioFile = fs.createWriteStream(audioFilePath);
-    
+
         audioStream.on('error', (error) => {
-          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable or unauthorized audio for video: ${videoTitle}`);
-            skippedVideos.push(videoTitle);
-            audioFile.close();
-            if (fs.existsSync(audioFilePath)) {
-              fs.unlinkSync(audioFilePath);
-            }
-            return;
-          } else {
-            console.error(`Error downloading audio stream for ${videoTitle}:`, error);
-            throw error; // Propagate other errors
-          }
+          console.warn(`Skipping unavailable or unauthorized audio for video: ${videoTitle}`);
+          skippedVideos.push(videoTitle);
+          audioFile.close();
+          cleanUpFile(audioFilePath);
+          return;
         });
-    
+
         audioStream.pipe(audioFile);
-    
         await new Promise((resolve, reject) => {
           audioFile.on('finish', resolve);
           audioFile.on('error', reject);
         });
-    
+
         // Merge video and audio using ffmpeg
         await new Promise((resolve, reject) => {
           ffmpeg()
@@ -264,57 +273,59 @@ router.post('/download-zip', async (req, res) => {
             .videoCodec('copy')
             .audioCodec('aac')
             .on('end', () => {
-              fs.unlinkSync(videoFilePath);
-              fs.unlinkSync(audioFilePath);
+              cleanUpFile(videoFilePath);
+              cleanUpFile(audioFilePath);
               downloadedFiles.push({ path: outputFilePath, name: `${sanitizedTitle}.mp4` });
               resolve();
             })
-            .on('error', reject)
+            .on('error', (error) => {
+              cleanUpFile(videoFilePath);
+              cleanUpFile(audioFilePath);
+              cleanUpFile(outputFilePath);
+              reject(error);
+            })
             .run();
         });
-    
       } catch (err) {
-        // Additional error handling if needed
-        if (err && (err.statusCode === 401 || err.message.includes('This video is unavailable') || err.message.includes('Video unavailable'))) {
-          console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
-          skippedVideos.push(videoTitle);
-        } else {
-          console.error(`Error processing video "${videoTitle}":`, err);
-        }
+        skippedVideos.push(videoTitle);
         continue; // Skip to the next video
       }
     }
-    
 
     const zipFilePath = path.join(downloadDir, `playlist_videos.zip`);
-     // Create a ZIP archive of the downloaded files
-     const archive = archiver('zip', { zlib: { level: 9 } });
-     res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
-     res.setHeader('Content-Type', 'application/zip');
- 
-     archive.pipe(res);
- 
-     for (const file of downloadedFiles) {
-       archive.file(file.path, { name: file.name });
-     }
- 
-     archive.finalize();
- 
-     // Clean up downloaded files after sending the ZIP file
-     archive.on('end', () => {
-       downloadedFiles.forEach(file => fs.unlinkSync(file.path));
-     });
-   } catch (err) {
-     console.error('Error processing playlist:', err);
-     res.status(500).json({ error: 'An error occurred while processing the playlist.' });
-   }
- });
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
+    res.setHeader('Content-Type', 'application/zip');
+
+    archive.pipe(res);
+
+    for (const file of downloadedFiles) {
+      archive.file(file.path, { name: file.name });
+    }
+
+    archive.finalize();
+
+    // Clean up downloaded files after sending the ZIP file
+    archive.on('end', () => {
+      downloadedFiles.forEach(file => cleanUpFile(file.path));
+    });
+  } catch (err) {
+    console.error('Error processing playlist:', err);
+    res.status(500).json({ error: 'An error occurred while processing the playlist.' });
+  }
+});
 
  // Endpoint to retrieve skipped videos
 router.get('/skipped-videos', (req, res) => {
   res.json({ skippedVideos });
 });
 
+// Function to clean up a file if it exists
+function cleanUpFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
 
 // Helper function to sanitize file names
 function sanitizeFileName(fileName) {
