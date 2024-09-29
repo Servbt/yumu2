@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
@@ -6,7 +6,15 @@ function App() {
   const [channelId, setChannelId] = useState('');
   const [playlists, setPlaylists] = useState([]);
   const [error, setError] = useState('');
-  const [isFetched, setIsFetched] = useState(false); 
+  const [isFetched, setIsFetched] = useState(false);
+
+  // Fetch the channel ID from localStorage when the component mounts
+  useEffect(() => {
+    const savedChannelId = localStorage.getItem('channelId');
+    if (savedChannelId) {
+      setChannelId(savedChannelId);
+    }
+  }, []);
 
   const handleFetchPlaylists = async () => {
     if (!channelId) {
@@ -22,16 +30,15 @@ function App() {
       }
       const data = await response.json();
       setPlaylists(data.playlists);
-      setIsFetched(true); // Set to true when playlists are successfully fetched
+      setIsFetched(true);
+
+      // Store the channel ID in localStorage
+      localStorage.setItem('channelId', channelId);
     } catch (err) {
       console.error('Error fetching playlists:', err);
       setError('Failed to fetch playlists. Please try again.');
     }
   };
-
-  // const handleLogin = () => {
-  //   window.location.href = 'http://localhost:5000/auth/google';
-  // };
 
   return (
     <div>
@@ -43,19 +50,24 @@ function App() {
             <p className='select'>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
 
             {/* Input for Channel ID */}
-            <div className="instructions mt-4">
+            <div className="instructions mt-2">
               <h2>Enter Your Channel ID</h2>
               <input
                 type="text"
                 placeholder="Enter YouTube Channel ID"
-                className="form-control mt-3 mb-3"
+                className="form-control mt-3 mb-2 text-center"
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
               />
-              <button className="btn btn-primary" onClick={handleFetchPlaylists}>
+              <button className="btn btn-primary " onClick={handleFetchPlaylists}>
                 Fetch Playlists
               </button>
               {error && <p style={{ color: 'red', marginTop: '10px' }}>{error}</p>}
+              
+              {/* Display the most recently used channel ID */}
+              {localStorage.getItem('channelId') && (
+                <p className="mt-2 select fs-5 text-muted d-none ">Last used Channel ID: {localStorage.getItem('channelId')}</p>
+              )}
             </div>
 
             {/* Instructions Section */}
