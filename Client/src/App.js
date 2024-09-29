@@ -6,6 +6,7 @@ function App() {
   const [channelId, setChannelId] = useState('');
   const [playlists, setPlaylists] = useState([]);
   const [error, setError] = useState('');
+  const [isFetched, setIsFetched] = useState(false); 
 
   const handleFetchPlaylists = async () => {
     if (!channelId) {
@@ -21,6 +22,7 @@ function App() {
       }
       const data = await response.json();
       setPlaylists(data.playlists);
+      setIsFetched(true); // Set to true when playlists are successfully fetched
     } catch (err) {
       console.error('Error fetching playlists:', err);
       setError('Failed to fetch playlists. Please try again.');
@@ -34,47 +36,50 @@ function App() {
   return (
     <div>
       <div className="container mt-5">
-        <div className="hero">
-          <h1>Yumu</h1>
-          <p className='select'>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
+        {/* Conditionally render the hero and instructions */}
+        {!isFetched && (
+          <div className="hero">
+            <h1>Yumu</h1>
+            <p className='select'>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
 
-          {/* Input for Channel ID */}
-          <div className="instructions mt-4">
-            <h2>Enter Your Channel ID</h2>
-            <input
-              type="text"
-              placeholder="Enter YouTube Channel ID"
-              className="form-control mt-3 mb-3"
-              value={channelId}
-              onChange={(e) => setChannelId(e.target.value)}
-            />
-            <button className="btn btn-primary" onClick={handleFetchPlaylists}>
-              Fetch Playlists
-            </button>
-            {error && <p style={{ color: 'red', marginTop: '10px' }}>{error}</p>}
-          </div>
+            {/* Input for Channel ID */}
+            <div className="instructions mt-4">
+              <h2>Enter Your Channel ID</h2>
+              <input
+                type="text"
+                placeholder="Enter YouTube Channel ID"
+                className="form-control mt-3 mb-3"
+                value={channelId}
+                onChange={(e) => setChannelId(e.target.value)}
+              />
+              <button className="btn btn-primary" onClick={handleFetchPlaylists}>
+                Fetch Playlists
+              </button>
+              {error && <p style={{ color: 'red', marginTop: '10px' }}>{error}</p>}
+            </div>
 
-          {/* Instructions Section */}
-          <div className="instructions mt-5">
-            <h2>How to Use Yumu</h2>
-            <div className="steps select">
-              <div className="step">
-                <div className="step-number">Step 1:</div>
-                <div className="step-description">Find your YouTube Channel ID (Go to YouTube → Settings → View Advanced Settings → Channel ID).</div>
-              </div>
-              <div className="step">
-                <div className="step-number">Step 2:</div>
-                <div className="step-description">Paste your Channel ID above and view your playlists (only public playlists are visible).</div>
-              </div>
-              <div className="step">
-                <div className="step-number">Step 3:</div>
-                <div className="step-description">Download Away! Videos are available as MP4s only.</div>
+            {/* Instructions Section */}
+            <div className="instructions mt-5">
+              <h2>How to Use Yumu</h2>
+              <div className="steps select">
+                <div className="step">
+                  <div className="step-number">Step 1:</div>
+                  <div className="step-description">Find your YouTube Channel ID (Go to YouTube → Settings → View Advanced Settings → Channel ID).</div>
+                </div>
+                <div className="step">
+                  <div className="step-number">Step 2:</div>
+                  <div className="step-description">Paste your Channel ID above and view your playlists (only public playlists are visible).</div>
+                </div>
+                <div className="step">
+                  <div className="step-number">Step 3:</div>
+                  <div className="step-description">Download Away! Videos are available as MP4s only.</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Display Playlists */}
+        {/* Display Playlists when fetched */}
         {playlists.length > 0 && (
           <Playlists playlists={playlists} />
         )}
@@ -91,6 +96,8 @@ function Playlists({ playlists }) {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [videos, setVideos] = useState([]);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadingVideos, setDownloadingVideos] = useState([]);
+  const [errorVideos, setErrorVideos] = useState([]); // State to track videos with errors
 
   const fetchVideos = async (playlistId) => {
     try {
@@ -105,40 +112,54 @@ function Playlists({ playlists }) {
     }
   };
 
-  const downloadVideo = (videoId, videoTitle) => {
+  const downloadVideo = async (videoId, videoTitle) => {
     if (!videoId || !videoTitle) {
       console.error('Invalid video ID or title:', videoId, videoTitle);
       return;
     }
 
-    fetch(`/api/download`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle }),
-    })
-      .then(response => {
-        if (!response.ok) throw new Error('Failed to download video');
-        return response.blob();
-      })
-      .then(blob => {
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `${videoTitle}.mp4`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-      })
-      .catch(error => console.error('Error downloading video:', error));
+    // Add video to the downloadingVideos state and remove it from errorVideos state if retrying
+    setDownloadingVideos((prev) => [...prev, videoId]);
+    setErrorVideos((prev) => prev.filter((id) => id !== videoId));
+
+    try {
+      const response = await fetch(`/api/download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle }),
+      });
+
+      if (!response.ok) throw new Error('Failed to download video');
+      const blob = await response.blob();
+
+      // Download the video
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${videoTitle}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error(`Error downloading video "${videoTitle}":`, error);
+
+      // Add the video to the errorVideos state if there's an error
+      setErrorVideos((prev) => [...prev, videoId]);
+    } finally {
+      // Remove video from the downloadingVideos state after the download is finished
+      setDownloadingVideos((prev) => prev.filter((id) => id !== videoId));
+    }
   };
 
   const downloadAllVideos = async () => {
     if (videos.length === 0) return;
 
     setIsDownloadingAll(true);
+    setErrorVideos([]); // Clear any previous errors before downloading all videos
+
     try {
       const response = await fetch('/api/download-zip', {
         method: 'POST',
@@ -168,7 +189,7 @@ function Playlists({ playlists }) {
 
   return (
     <div className="d-flex flex-row container left-container">
-      <div className="playlists-container">
+      <div className="playlists-container fade-in">
         <h2 className="mb-4 mt-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
         <div className="row">
           {playlists.map((playlist, index) => (
@@ -188,7 +209,7 @@ function Playlists({ playlists }) {
       </div>
 
       {/* Right Section: Videos in Playlist */}
-      <div className="videos-container">
+      <div className="videos-container fade-in">
         <h2 className='row ps-2' style={{ color: '#F72585' }}>Videos in Playlist</h2>
         {selectedPlaylist && videos.length > 0 ? (
           <>
@@ -200,8 +221,16 @@ function Playlists({ playlists }) {
                 <div key={video.id} className="list-group-item d-flex align-items-center fade-in">
                   <img src={video.thumbnail} alt={`${video.title} Thumbnail`} className="img-thumbnail mr-3" style={{ width: '80px' }} />
                   <div className="flex-grow-1 p-2">{video.title}</div>
-                  <button className="btn btn-primary ml-auto col-3" onClick={() => downloadVideo(video.id, video.title)}>
-                    Download Video
+                  <button
+                    className={`btn ml-auto col-3 ${errorVideos.includes(video.id) ? 'btn-danger' : 'btn-primary'}`}
+                    onClick={() => downloadVideo(video.id, video.title)}
+                    disabled={downloadingVideos.includes(video.id)} // Disable button while downloading
+                  >
+                    {downloadingVideos.includes(video.id)
+                      ? 'Downloading...'
+                      : errorVideos.includes(video.id)
+                      ? 'Unavailable'
+                      : 'Download Video'}
                   </button>
                 </div>
               ))}
