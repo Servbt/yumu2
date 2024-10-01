@@ -4,9 +4,9 @@
   "description": "A youtube playlist downloader",
   "main": "index.js",
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd server && node index.js",
-    "client": "cd client && npm run build"
+    "start": "npm run build && npm run server",
+    "build": "cd client && npm install && npm run build",
+    "server": "cd server && npm install && node index.js"
   },
   "keywords": [],
   "author": "Arian",
