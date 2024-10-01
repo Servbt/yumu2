@@ -1,7 +1,7 @@
 {
   "name": "yumu2",
   "version": "1.0.0",
-  "description": "A youtube playlist downloader",
+  "description": "A youtube playlist downloader, made for personal use",
   "main": "index.js",
   "scripts": {
     "start": "npm run build && npm run server",
