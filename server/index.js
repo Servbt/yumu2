@@ -70,6 +70,9 @@ db.connect();
 app.use('/api', userRoutes);
 app.use('/channel', channelRoutes);
 
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+});
 
 //  solely checks authentication
 app.get('/api/authenticated', (req, res) => {
