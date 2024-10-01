@@ -12,6 +12,5 @@
   "author": "Arian",
   "license": "ISC",
   "devDependencies": {
-    "concurrently": "^9.0.1"
   }
 }
