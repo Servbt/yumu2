@@ -45,6 +45,21 @@ router.post('/download', async (req, res, next) => {
   let videoFile, audioFile; // Declare variables to hold stream references
 
   try {
+    // Use YouTube Data API to verify video details before downloading
+    const videoId = ytdl.getVideoID(videoUrl);
+    const apiResponse = await axios.get(`https://www.googleapis.com/youtube/v3/videos`, {
+      params: {
+        part: 'snippet,contentDetails,status',
+        id: videoId,
+        key: process.env.YOUTUBE_API_KEY, // Make sure your API key is set in the .env file
+      },
+    });
+
+    const videoData = apiResponse.data.items[0];
+    if (!videoData || videoData.status.embeddable === false || videoData.status.privacyStatus !== 'public') {
+      return res.status(403).json({ error: 'This video cannot be downloaded as it is either private or unavailable.' });
+    }
+
     // Ensure the downloads directory exists
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir);
@@ -150,6 +165,7 @@ router.post('/download', async (req, res, next) => {
     if (audioFile) audioFile.close();
   }
 });
+
 
 // Route to fetch videos from a specific playlist
 router.get('/playlist/:playlistId/videos', async (req, res) => {
