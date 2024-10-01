@@ -1,0 +1,17 @@
+{
+  "name": "yumu2",
+  "version": "1.0.0",
+  "description": "A youtube playlist downloader",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node index.js",
+    "client": "cd client && npm start"
+  },
+  "keywords": [],
+  "author": "Arian",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
