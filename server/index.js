@@ -54,15 +54,18 @@ app.use(express.static(path.join(__dirname, '../client/build')));
 app.use(passport.initialize());
 app.use(passport.session());
 
-const db = new pg.Client({
-  user: process.env.PG_USER,
-  host: process.env.PG_HOST,
-  database: process.env.PG_DATABASE,
-  password: process.env.PG_PASSWORD,
-  port: process.env.PG_PORT,
-});
-db.connect();
+const { Pool } = pg;
 
+// Use DATABASE_URL from Heroku or fall back to your local settings
+const isProduction = process.env.NODE_ENV === 'production';
+const connectionString = process.env.DATABASE_URL || `postgres://${process.env.PG_USER}:${process.env.PG_PASSWORD}@${process.env.PG_HOST}:${process.env.PG_PORT}/${process.env.PG_DATABASE}`;
+
+const db = new Pool({
+  connectionString: connectionString,
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
+});
+
+db.connect();
 // for download routes
 app.use('/api', userRoutes);
 app.use('/channel', channelRoutes);
