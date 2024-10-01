@@ -24,7 +24,8 @@ function App() {
 
     setError('');
     try {
-      const response = await fetch(`http://localhost:5000/channel/playlists/${channelId}`);
+      // const response = await fetch(`http://localhost:5000/channel/playlists/${channelId}`);
+      const response = await fetch(`/channel/playlists/${channelId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch playlists. Please check the channel ID.');
       }
