@@ -10,20 +10,26 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
-import axios from "axios"; 
+import axios from "axios";
 import dotenv from 'dotenv';
 dotenv.config();
-
-
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
-
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; 
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
+
+
+const proxyAgent = new HttpsProxyAgent('http://spxmbla91v:ulLninD09mBv_9h8Jz@gate.smartproxy.com:10001');
+
+const axiosInstance = axios.create({
+  httpsAgent: proxyAgent,
+});
+
 
 
 // Endpoint to handle video download requests
@@ -45,28 +51,19 @@ router.post('/download', async (req, res, next) => {
   let videoFile, audioFile; // Declare variables to hold stream references
 
   try {
-    // Use YouTube Data API to verify video details before downloading
-    const videoId = ytdl.getVideoID(videoUrl);
-    const apiResponse = await axios.get(`https://www.googleapis.com/youtube/v3/videos`, {
-      params: {
-        part: 'snippet,contentDetails,status',
-        id: videoId,
-        key: process.env.YOUTUBE_API_KEY, // Make sure your API key is set in the .env file
-      },
-    });
-
-    const videoData = apiResponse.data.items[0];
-    if (!videoData || videoData.status.embeddable === false || videoData.status.privacyStatus !== 'public') {
-      return res.status(403).json({ error: 'This video cannot be downloaded as it is either private or unavailable.' });
-    }
-
     // Ensure the downloads directory exists
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir);
     }
 
-    // Download video-only stream
-    const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
+    // Download video-only stream using the proxy
+    const videoStream = ytdl(videoUrl, {
+      filter: 'videoonly',
+      requestOptions: {
+        client: proxyAgent, // Use `client`
+      },
+    });
+
     videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
@@ -91,8 +88,17 @@ router.post('/download', async (req, res, next) => {
       });
     });
 
-    // Download audio-only stream
-    const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
+    
+    // Download audio-only stream using the proxy
+    const audioStream = ytdl(videoUrl, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      requestOptions: {
+        client: proxyAgent, // Use `client`
+      },
+    });
+
+
     audioFile = fs.createWriteStream(audioFilePath);
 
     audioStream.on('error', (error) => {
@@ -174,42 +180,42 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
   let nextPageToken = '';
 
   try {
-      // Check if OAuth is required or if we're using public API access
-      do {
-          const response = await axios.get(
-              `https://www.googleapis.com/youtube/v3/playlistItems`,
-              {
-                  params: {
-                      part: 'snippet',
-                      playlistId: playlistId,
-                      maxResults: 50, // Fetch up to 50 videos per page
-                      pageToken: nextPageToken,
-                      key: YOUTUBE_API_KEY, // Use your public API key
-                  }
-              }
-          );
-
-          if (response.data.items) {
-              const videos = response.data.items.map((item) => ({
-                  id: item.snippet.resourceId.videoId,
-                  title: item.snippet.title,
-                  thumbnail: item.snippet.thumbnails?.default?.url, // Handle missing thumbnails
-              }));
-
-              allVideos = [...allVideos, ...videos];
+    // Check if OAuth is required or if we're using public API access
+    do {
+      const response = await axios.get(
+        `https://www.googleapis.com/youtube/v3/playlistItems`,
+        {
+          params: {
+            part: 'snippet',
+            playlistId: playlistId,
+            maxResults: 50, // Fetch up to 50 videos per page
+            pageToken: nextPageToken,
+            key: YOUTUBE_API_KEY, // Use your public API key
           }
+        }
+      );
 
-          nextPageToken = response.data.nextPageToken;
-      } while (nextPageToken);
+      if (response.data.items) {
+        const videos = response.data.items.map((item) => ({
+          id: item.snippet.resourceId.videoId,
+          title: item.snippet.title,
+          thumbnail: item.snippet.thumbnails?.default?.url, // Handle missing thumbnails
+        }));
 
-      if (allVideos.length > 0) {
-          res.json({ videos: allVideos });
-      } else {
-          res.status(404).json({ error: "No videos found for this playlist." });
+        allVideos = [...allVideos, ...videos];
       }
+
+      nextPageToken = response.data.nextPageToken;
+    } while (nextPageToken);
+
+    if (allVideos.length > 0) {
+      res.json({ videos: allVideos });
+    } else {
+      res.status(404).json({ error: "No videos found for this playlist." });
+    }
   } catch (error) {
-      console.error('Error fetching videos:', error);
-      res.status(500).json({ error: 'Failed to fetch videos from the playlist' });
+    console.error('Error fetching videos:', error);
+    res.status(500).json({ error: 'Failed to fetch videos from the playlist' });
   }
 });
 
@@ -237,13 +243,13 @@ router.post('/download-zip', async (req, res) => {
     for (const video of videos) {
       const { videoUrl, videoTitle } = video;
       console.log(`Processing video: ${videoTitle}`);
-    
+
       try {
         const sanitizedTitle = sanitizeFileName(videoTitle);
         const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
         const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
         const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-    
+
         // Download video-only stream
         const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
         const videoFile = fs.createWriteStream(videoFilePath);
@@ -331,7 +337,7 @@ router.post('/download-zip', async (req, res) => {
   }
 });
 
- // Endpoint to retrieve skipped videos
+// Endpoint to retrieve skipped videos
 router.get('/skipped-videos', (req, res) => {
   res.json({ skippedVideos });
 });
