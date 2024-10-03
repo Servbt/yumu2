@@ -30,18 +30,9 @@ const downloadDir = path.join(__dirname, 'downloads');
 //   httpsAgent: proxyAgent,
 // });
 
-// Your proxy information
-const proxyHost = '94.103.184.93';
-const proxyPort = '5432';
-const proxyUsername = 'bie28';
-const proxyPassword = '4oy7sjp7';
-
-// Construct proxy URL
-const proxyUrl = `http://${proxyUsername}:${proxyPassword}@${proxyHost}:${proxyPort}`;
-
-// Create HttpsProxyAgent
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
-
+// Define the proxy URL, including the authentication details
+const proxyUrl = 'http://bie28:4oy7sjp7@94.103.184.93:5432'; // Your proxy details
+const proxyAgent = new HttpsProxyAgent(proxyUrl); // Create the proxy agent
 
 
 // Endpoint to handle video download requests
@@ -54,34 +45,28 @@ router.post('/download', async (req, res, next) => {
     return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
 
-  // Define paths outside of the try block to make them accessible for cleanup
   const sanitizedTitle = sanitizeFileName(videoTitle);
   const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
   const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
   const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
 
-  let videoFile, audioFile; // Declare variables to hold stream references
+  let videoFile, audioFile;
 
   try {
-    // Ensure the downloads directory exists
     if (!fs.existsSync(downloadDir)) {
       fs.mkdirSync(downloadDir);
     }
 
-    // Download video-only stream using the proxy
+    // Download video-only stream using the proxy agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: {
-        agent: proxyAgent, // Apply the proxy agent
-      },
+      requestOptions: { agent: proxyAgent },
     });
-    
-
     videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
       console.error('Error downloading video stream:', error.message);
-      videoFile.close(); // Ensure the stream is closed on error
+      videoFile.close();
       cleanUpFile(videoFilePath);
       cleanUpFile(audioFilePath);
       if (!res.headersSent) {
@@ -93,7 +78,7 @@ router.post('/download', async (req, res, next) => {
 
     await new Promise((resolve, reject) => {
       videoFile.on('finish', () => {
-        videoFile.close(resolve); // Ensure the file stream is fully closed
+        videoFile.close(resolve);
       });
       videoFile.on('error', (error) => {
         cleanUpFile(videoFilePath);
@@ -101,22 +86,17 @@ router.post('/download', async (req, res, next) => {
       });
     });
 
-
-    // Download audio-only stream using the proxy
+    // Download audio-only stream using the proxy agent
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: {
-        agent: proxyAgent, // Apply the proxy agent
-      },
+      requestOptions: { agent: proxyAgent },
     });
-
-
     audioFile = fs.createWriteStream(audioFilePath);
 
     audioStream.on('error', (error) => {
       console.error('Error downloading audio stream:', error.message);
-      audioFile.close(); // Ensure the stream is closed on error
+      audioFile.close();
       cleanUpFile(videoFilePath);
       cleanUpFile(audioFilePath);
       if (!res.headersSent) {
@@ -128,7 +108,7 @@ router.post('/download', async (req, res, next) => {
 
     await new Promise((resolve, reject) => {
       audioFile.on('finish', () => {
-        audioFile.close(resolve); // Ensure the file stream is fully closed
+        audioFile.close(resolve);
       });
       audioFile.on('error', (error) => {
         cleanUpFile(audioFilePath);
@@ -145,7 +125,6 @@ router.post('/download', async (req, res, next) => {
         .videoCodec('copy')
         .audioCodec('aac')
         .on('end', () => {
-          // Clean up temporary files
           cleanUpFile(videoFilePath);
           cleanUpFile(audioFilePath);
           resolve();
@@ -165,9 +144,8 @@ router.post('/download', async (req, res, next) => {
     res.download(outputFilePath, (err) => {
       if (err) {
         console.error('Error sending file:', err);
-        return next(err); // Pass the error to the global error handler
+        return next(err);
       }
-      // Optionally delete the file after download
       cleanUpFile(outputFilePath);
     });
   } catch (err) {
@@ -179,7 +157,6 @@ router.post('/download', async (req, res, next) => {
       return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
     }
   } finally {
-    // Close file streams if they are still open
     if (videoFile) videoFile.close();
     if (audioFile) audioFile.close();
   }
