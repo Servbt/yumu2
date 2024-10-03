@@ -72,7 +72,7 @@ router.post('/download', async (req, res, next) => {
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
       requestOptions: {
-        client: proxyAgent, // Apply the proxy agent
+        agent: proxyAgent, // Apply the proxy agent
       },
     });
     
@@ -107,7 +107,7 @@ router.post('/download', async (req, res, next) => {
       filter: 'audioonly',
       quality: 'highestaudio',
       requestOptions: {
-        client: proxyAgent, // Apply the proxy agent
+        agent: proxyAgent, // Apply the proxy agent
       },
     });
 
