@@ -24,11 +24,23 @@ const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
 
-const proxyAgent = new HttpsProxyAgent('http://spxmbla91v:ulLninD09mBv_9h8Jz@gate.smartproxy.com:10001');
+// const proxyAgent = new HttpsProxyAgent('http://spxmbla91v:ulLninD09mBv_9h8Jz@gate.smartproxy.com:10001');
 
-const axiosInstance = axios.create({
-  httpsAgent: proxyAgent,
-});
+// const axiosInstance = axios.create({
+//   httpsAgent: proxyAgent,
+// });
+
+// Your proxy information
+const proxyHost = '94.103.184.93';
+const proxyPort = '5432';
+const proxyUsername = 'bie28';
+const proxyPassword = '4oy7sjp7';
+
+// Construct proxy URL
+const proxyUrl = `http://${proxyUsername}:${proxyPassword}@${proxyHost}:${proxyPort}`;
+
+// Create HttpsProxyAgent
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
 
 
 
@@ -60,7 +72,7 @@ router.post('/download', async (req, res, next) => {
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
       requestOptions: {
-        httpsAgent: proxyAgent, // Use httpsAgent instead
+        client: proxyAgent, // Apply the proxy agent
       },
     });
     
@@ -95,11 +107,10 @@ router.post('/download', async (req, res, next) => {
       filter: 'audioonly',
       quality: 'highestaudio',
       requestOptions: {
-        httpsAgent: proxyAgent, // Use httpsAgent instead
-      }
+        client: proxyAgent, // Apply the proxy agent
+      },
     });
-    
-    
+
 
     audioFile = fs.createWriteStream(audioFilePath);
 
