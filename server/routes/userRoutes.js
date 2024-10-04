@@ -18,6 +18,7 @@ dotenv.config();
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const COOKIE = process.env.COOKIE;
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,7 +61,12 @@ router.post('/download', async (req, res, next) => {
     // Download video-only stream using the proxy agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { client: proxyAgent },
+      requestOptions: { 
+        client: proxyAgent,
+        headers: {
+          cookie: COOKIE
+        }
+       },
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -90,7 +96,12 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { client: proxyAgent },
+      requestOptions: { 
+        client: proxyAgent,
+        headers: {
+          cookie: COOKIE
+        }
+       },
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
