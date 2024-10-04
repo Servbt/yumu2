@@ -1,40 +1,28 @@
-// authRoutes.js
 import express from "express";
 import fs from 'fs';
 import ytdl from '@distube/ytdl-core';
-const { UnrecoverableError } = ytdl; // Extract UnrecoverableError from the default export
-
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properly
 import { fileURLToPath } from 'url';
-import { google } from 'googleapis';
 import archiver from "archiver";
 import { HttpsProxyAgent } from 'https-proxy-agent';
-
-import axios from "axios";
 import dotenv from 'dotenv';
 dotenv.config();
+import axios from "axios";
+
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const COOKIE = process.env.COOKIE;
+const PROXY = process.env.PROXY;
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
-
-// const proxyAgent = new HttpsProxyAgent('http://spxmbla91v:ulLninD09mBv_9h8Jz@gate.smartproxy.com:10001');
-
-// const axiosInstance = axios.create({
-//   httpsAgent: proxyAgent,
-// });
-
-// Define the proxy URL, including the authentication details
-const proxyUrl = 'http://bie28:4oy7sjp7@94.103.184.93:5432'; // Your proxy details
-const proxyAgent = new HttpsProxyAgent(proxyUrl); // Create the proxy agent
-
+// Create the proxy agent using ytdl
+const proxyUrl = PROXY; // Your proxy details
+const agent = new HttpsProxyAgent(proxyUrl); // HttpsProxyAgent is correct here
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
@@ -61,12 +49,7 @@ router.post('/download', async (req, res, next) => {
     // Download video-only stream using the proxy agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { 
-        client: proxyAgent,
-        headers: {
-          cookie: COOKIE
-        }
-       },
+      requestOptions: { client: agent }, // Change to "client" instead of "agent"
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -96,12 +79,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { 
-        client: proxyAgent,
-        headers: {
-          cookie: COOKIE
-        }
-       },
+      requestOptions: { client: agent }, // Change to "client" instead of "agent"
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
