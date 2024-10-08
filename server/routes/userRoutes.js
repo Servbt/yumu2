@@ -8,20 +8,20 @@ import { fileURLToPath } from 'url';
 import archiver from "archiver";
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
-dotenv.config();
 import axios from "axios";
+dotenv.config();
 
 const router = express.Router();
-ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
+ffmpeg.setFfmpegPath(ffmpegStatic); 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const PROXY = process.env.PROXY;
+const PROXY = process.env.PROXY
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
 // Create the proxy agent using ytdl
-const proxyUrl = PROXY; // Your proxy details
+const proxyUrl = PROXY; 
 const agent = new HttpsProxyAgent(proxyUrl); // HttpsProxyAgent is correct here
 
 // Endpoint to handle video download requests
