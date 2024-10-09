@@ -19,9 +19,9 @@ console.log(PROXY);
 
 
 const cookies = [
-  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
-  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
-  // Add more cookies as needed
+  { name: 'VISITOR_PRIVACY_METADATA', value: process.env.COOKIE_1 },
+  { name: '__Secure-3PSID', value: process.env.COOKIE_2 },
+  { name: '__Secure-1PSIDTS', value: process.env.COOKIE_3 },
 ];
 
 // Define __dirname for ES modules
@@ -60,7 +60,7 @@ router.post('/download', async (req, res, next) => {
 
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { client: ytdlAgent }, 
+      requestOptions: { agent: ytdlAgent }, 
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -90,7 +90,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { client: ytdlAgent }, // Use the cookies and proxy agent
+      requestOptions: { agent: ytdlAgent }, // Use the cookies and proxy agent
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
