@@ -17,16 +17,16 @@ const PROXY = process.env.PROXY;
 
 // Load cookies from environment variables
 const cookies = [
-  `VISITOR_PRIVACY_METADATA=${process.env.COOKIE_1}`,
-  `__Secure-3PSID=${process.env.COOKIE_2}`,
-  `__Secure-1PSIDTS=${process.env.COOKIE_3}`,
-  `__Secure-3PAPISID=${process.env.COOKIE_4}`,
-  `__Secure-3PSIDCC=${process.env.COOKIE_5}`,
-  `__Secure-3PSIDTS=${process.env.COOKIE_6}`,
-  `LOGIN_INFO=${process.env.COOKIE_7}`,
-  `PREF=${process.env.COOKIE_8}`,
-  `YT_CL=${process.env.COOKIE_9}`
-].join('; ');  // Join cookies to form a single string
+  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
+  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
+  { name: "__Secure-1PSIDTS", value: process.env.COOKIE_3 },
+  { name: "__Secure-3PAPISID", value: process.env.COOKIE_4 },
+  { name: "__Secure-3PSIDCC", value: process.env.COOKIE_5 },
+  { name: "__Secure-3PSIDTS", value: process.env.COOKIE_6 },
+  { name: "LOGIN_INFO", value: process.env.COOKIE_7 },
+  { name: "PREF", value: process.env.COOKIE_8 },
+  { name: "YT_CL", value: process.env.COOKIE_9 }
+];
 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -59,13 +59,13 @@ router.post('/download', async (req, res, next) => {
       fs.mkdirSync(downloadDir);
     }
 
-    // Download video-only stream using the proxy and cookies agent
+    // Download video-only stream using the proxy and cookies
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
       requestOptions: {
-        agent, // Use proxy agent
+        client: agent, // Use 'client' instead of 'agent'
         headers: {
-          Cookie: cookies // Add cookies to headers
+          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ') // Send cookies properly
         }
       }
     });
@@ -93,14 +93,14 @@ router.post('/download', async (req, res, next) => {
       });
     });
 
-    // Download audio-only stream using the proxy and cookies agent
+    // Download audio-only stream using the proxy and cookies
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
       requestOptions: {
-        agent, // Use proxy agent
+        client: agent, // Use 'client' instead of 'agent'
         headers: {
-          Cookie: cookies // Add cookies to headers
+          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
         }
       }
     });
