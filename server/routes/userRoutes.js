@@ -37,6 +37,23 @@ const downloadDir = path.join(__dirname, 'downloads');
 const proxyUrl = PROXY;
 const agent = new HttpsProxyAgent(proxyUrl); // Create proxy agent
 
+
+// Check your public IP to confirm proxy
+async function checkProxy() {
+  try {
+    const response = await axios.get('https://api.ipify.org?format=json', { 
+      httpAgent: agent,
+      httpsAgent: agent 
+    });
+    console.log(`Your IP address via proxy: ${response.data.ip}`);
+  } catch (error) {
+    console.error('Error verifying proxy:', error);
+  }
+}
+
+checkProxy();
+
+
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
   const { videoUrl, videoTitle } = req.body;
@@ -63,12 +80,15 @@ router.post('/download', async (req, res, next) => {
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
       requestOptions: {
-        client: agent, // Use 'client' instead of 'agent'
+        client: agent,
         headers: {
-          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ') // Send cookies properly
+          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
         }
       }
     });
+    
+    console.log('Proxy is being used for video download');
+    
     videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
