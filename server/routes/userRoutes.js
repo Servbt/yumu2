@@ -7,7 +7,7 @@ import ffmpegStatic from 'ffmpeg-static';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 dotenv.config();
-import axios from "axios";
+import { HttpsProxyAgent } from 'https-proxy-agent'; // Correct proxy package
 
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -16,25 +16,25 @@ const PROXY = process.env.PROXY;
 
 // Load cookies from environment variables
 const cookies = [
-  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
-  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
-  { name: "__Secure-1PSIDTS", value: process.env.COOKIE_3 },
-  { name: "__Secure-3PAPISID", value: process.env.COOKIE_4 },
-  { name: "__Secure-3PSIDCC", value: process.env.COOKIE_5 },
-  { name: "__Secure-3PSIDTS", value: process.env.COOKIE_6 },
-  { name: "LOGIN_INFO", value: process.env.COOKIE_7 },
-  { name: "PREF", value: process.env.COOKIE_8 },
-  { name: "YT_CL", value: process.env.COOKIE_9 }
-];
+  `VISITOR_PRIVACY_METADATA=${process.env.COOKIE_1}`,
+  `__Secure-3PSID=${process.env.COOKIE_2}`,
+  `__Secure-1PSIDTS=${process.env.COOKIE_3}`,
+  `__Secure-3PAPISID=${process.env.COOKIE_4}`,
+  `__Secure-3PSIDCC=${process.env.COOKIE_5}`,
+  `__Secure-3PSIDTS=${process.env.COOKIE_6}`,
+  `LOGIN_INFO=${process.env.COOKIE_7}`,
+  `PREF=${process.env.COOKIE_8}`,
+  `YT_CL=${process.env.COOKIE_9}`
+].join('; ');  // Join cookies to form a single string
 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
-// Create the proxy agent using ytdl with cookies
+// Create the proxy agent using HttpsProxyAgent
 const proxyUrl = PROXY;
-const agent = new ytdl.createAgent(cookies, { proxy: proxyUrl });
+const agent = new HttpsProxyAgent(proxyUrl); // Create proxy agent
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
@@ -61,7 +61,12 @@ router.post('/download', async (req, res, next) => {
     // Download video-only stream using the proxy and cookies agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { agent }, // Correct option is 'agent'
+      requestOptions: {
+        agent, // Use proxy agent
+        headers: {
+          Cookie: cookies // Add cookies to headers
+        }
+      }
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -91,7 +96,12 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { agent }, // Correct option is 'agent'
+      requestOptions: {
+        agent, // Use proxy agent
+        headers: {
+          Cookie: cookies // Add cookies to headers
+        }
+      }
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
