@@ -53,6 +53,22 @@ async function checkProxy() {
 
 checkProxy();
 
+async function testCookies() {
+  try {
+    const response = await axios.get('https://www.youtube.com', {
+      headers: {
+        'Cookie': cookies.map(c => `${c.name}=${c.value}`).join('; '),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    console.log('Test Response Status:', response.status);
+    // console.log('Test Response Data:', response.data); // Optionally log response body
+  } catch (error) {
+    console.error('Error in cookie test request:', error.message);
+  }
+}
+
+testCookies();
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
