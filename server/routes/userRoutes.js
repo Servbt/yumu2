@@ -25,7 +25,6 @@ const cookies = [
   { name: "LOGIN_INFO", value: process.env.COOKIE_7 },
   { name: "PREF", value: process.env.COOKIE_8 },
   { name: "YT_CL", value: process.env.COOKIE_9 }
-  // Add more cookies if necessary
 ];
 
 // Define __dirname for ES modules
@@ -33,7 +32,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
-// Create the proxy agent using ytdl
+// Create the proxy agent using ytdl with cookies
 const proxyUrl = PROXY;
 const ytdlAgent = ytdl.createProxyAgent({ uri: proxyUrl }, cookies);
 
@@ -62,7 +61,7 @@ router.post('/download', async (req, res, next) => {
     // Download video-only stream using the proxy and cookies agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { client: ytdlAgent }, // Use 'client' instead of 'agent'
+      requestOptions: { agent: ytdlAgent }, // Correct option is 'agent'
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -92,7 +91,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { client: ytdlAgent }, // Use 'client' instead of 'agent'
+      requestOptions: { agent: ytdlAgent }, // Correct option is 'agent'
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
@@ -163,6 +162,7 @@ router.post('/download', async (req, res, next) => {
     if (audioFile) audioFile.close();
   }
 });
+
 
 
 // Route to fetch videos from a specific playlist
