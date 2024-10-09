@@ -3,25 +3,28 @@ import fs from 'fs';
 import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
-import ffmpegStatic from 'ffmpeg-static'; 
+import ffmpegStatic from 'ffmpeg-static';
 import { fileURLToPath } from 'url';
-import archiver from "archiver";
-import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
 dotenv.config();
-import axios from "axios";
 
 const router = express.Router();
-ffmpeg.setFfmpegPath(ffmpegStatic); 
+ffmpeg.setFfmpegPath(ffmpegStatic);
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const PROXY = process.env.PROXY;
-console.log(PROXY);
 
-
+// Load cookies from environment variables
 const cookies = [
-  { name: 'VISITOR_PRIVACY_METADATA', value: process.env.COOKIE_1 },
-  { name: '__Secure-3PSID', value: process.env.COOKIE_2 },
-  { name: '__Secure-1PSIDTS', value: process.env.COOKIE_3 },
+  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
+  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
+  { name: "__Secure-1PSIDTS", value: process.env.COOKIE_3 },
+  { name: "__Secure-3PAPISID", value: process.env.COOKIE_4 },
+  { name: "__Secure-3PSIDCC", value: process.env.COOKIE_5 },
+  { name: "__Secure-3PSIDTS", value: process.env.COOKIE_6 },
+  { name: "LOGIN_INFO", value: process.env.COOKIE_7 },
+  { name: "PREF", value: process.env.COOKIE_8 },
+  { name: "YT_CL", value: process.env.COOKIE_9 }
+  // Add more cookies if necessary
 ];
 
 // Define __dirname for ES modules
@@ -31,9 +34,6 @@ const downloadDir = path.join(__dirname, 'downloads');
 
 // Create the proxy agent using ytdl
 const proxyUrl = PROXY;
-const agent = new HttpsProxyAgent(proxyUrl);
-
-// Create ytdl agent with cookies and proxy
 const ytdlAgent = ytdl.createProxyAgent({ uri: proxyUrl }, cookies);
 
 // Endpoint to handle video download requests
@@ -58,9 +58,10 @@ router.post('/download', async (req, res, next) => {
       fs.mkdirSync(downloadDir);
     }
 
+    // Download video-only stream using the proxy and cookies agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { agent: ytdlAgent }, 
+      requestOptions: { client: ytdlAgent }, // Use 'client' instead of 'agent'
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -71,7 +72,7 @@ router.post('/download', async (req, res, next) => {
       cleanUpFile(audioFilePath);
       if (!res.headersSent) {
         return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
-      } 
+      }
     });
 
     videoStream.pipe(videoFile);
@@ -90,7 +91,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { agent: ytdlAgent }, // Use the cookies and proxy agent
+      requestOptions: { client: ytdlAgent }, // Use 'client' instead of 'agent'
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
