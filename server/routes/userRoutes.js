@@ -3,26 +3,38 @@ import fs from 'fs';
 import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
-import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properly
+import ffmpegStatic from 'ffmpeg-static'; 
 import { fileURLToPath } from 'url';
 import archiver from "archiver";
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
-import axios from "axios";
 dotenv.config();
+import axios from "axios";
 
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic); 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const PROXY = process.env.PROXY
+const PROXY = process.env.PROXY;
+console.log(PROXY);
+
+
+const cookies = [
+  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
+  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
+  // Add more cookies as needed
+];
+
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 
 // Create the proxy agent using ytdl
-const proxyUrl = PROXY; 
-const agent = new HttpsProxyAgent(proxyUrl); // HttpsProxyAgent is correct here
+const proxyUrl = PROXY;
+const agent = new HttpsProxyAgent(proxyUrl);
+
+// Create ytdl agent with cookies and proxy
+const ytdlAgent = ytdl.createProxyAgent({ uri: proxyUrl }, cookies);
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
@@ -46,10 +58,9 @@ router.post('/download', async (req, res, next) => {
       fs.mkdirSync(downloadDir);
     }
 
-    // Download video-only stream using the proxy agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { client: agent }, // Change to "client" instead of "agent"
+      requestOptions: { client: ytdlAgent }, 
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -75,11 +86,11 @@ router.post('/download', async (req, res, next) => {
       });
     });
 
-    // Download audio-only stream using the proxy agent
+    // Download audio-only stream using the proxy and cookies agent
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { client: agent }, // Change to "client" instead of "agent"
+      requestOptions: { client: ytdlAgent }, // Use the cookies and proxy agent
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
