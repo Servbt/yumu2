@@ -16,17 +16,17 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const PROXY = process.env.PROXY;
 
 // Load cookies from environment variables
-const cookies = [
-  { name: "VISITOR_PRIVACY_METADATA", value: process.env.COOKIE_1 },
-  { name: "__Secure-3PSID", value: process.env.COOKIE_2 },
-  { name: "__Secure-1PSIDTS", value: process.env.COOKIE_3 },
-  { name: "__Secure-3PAPISID", value: process.env.COOKIE_4 },
-  { name: "__Secure-3PSIDCC", value: process.env.COOKIE_5 },
-  { name: "__Secure-3PSIDTS", value: process.env.COOKIE_6 },
-  { name: "LOGIN_INFO", value: process.env.COOKIE_7 },
-  { name: "PREF", value: process.env.COOKIE_8 },
-  { name: "YT_CL", value: process.env.COOKIE_9 }
-];
+const cookieString = [
+  `VISITOR_PRIVACY_METADATA=${process.env.COOKIE_VISITOR_PRIVACY_METADATA}`,
+  `__Secure-3PSID=${process.env.COOKIE_SECURE_3PSID}`,
+  `__Secure-1PSIDTS=${process.env.COOKIE_SECURE_1PSIDTS}`,
+  `__Secure-3PAPISID=${process.env.COOKIE_SECURE_3PAPISID}`,
+  `__Secure-3PSIDCC=${process.env.COOKIE_SECURE_3PSIDCC}`,
+  `__Secure-3PSIDTS=${process.env.COOKIE_SECURE_3PSIDTS}`,
+  `LOGIN_INFO=${process.env.COOKIE_LOGIN_INFO}`,
+  `PREF=${process.env.COOKIE_PREF}`,
+  `YT_CL=${process.env.COOKIE_YT_CL}`
+].join('; ');
 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -98,8 +98,12 @@ router.post('/download', async (req, res, next) => {
       requestOptions: {
         client: agent,
         headers: {
-          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-        }
+          'Cookie': cookieString,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.youtube.com/'
+        },
+        proxy: proxyUrl // Ensure proxy is properly set up here
       }
     });
     
@@ -134,10 +138,14 @@ router.post('/download', async (req, res, next) => {
       filter: 'audioonly',
       quality: 'highestaudio',
       requestOptions: {
-        client: agent, // Use 'client' instead of 'agent'
+        client: agent,
         headers: {
-          Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-        }
+          'Cookie': cookieString,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.youtube.com/'
+        },
+        proxy: proxyUrl // Ensure proxy is properly set up here
       }
     });
     audioFile = fs.createWriteStream(audioFilePath);
