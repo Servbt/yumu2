@@ -60,7 +60,7 @@ router.post('/download', async (req, res, next) => {
 
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { agent: ytdlAgent }, 
+      requestOptions: { client: ytdlAgent }, 
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -71,7 +71,7 @@ router.post('/download', async (req, res, next) => {
       cleanUpFile(audioFilePath);
       if (!res.headersSent) {
         return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
-      }
+      } 
     });
 
     videoStream.pipe(videoFile);
@@ -90,7 +90,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { agent: ytdlAgent }, // Use the cookies and proxy agent
+      requestOptions: { client: ytdlAgent }, // Use the cookies and proxy agent
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
