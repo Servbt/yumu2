@@ -34,7 +34,7 @@ const downloadDir = path.join(__dirname, 'downloads');
 
 // Create the proxy agent using ytdl with cookies
 const proxyUrl = PROXY;
-const ytdlAgent = ytdl.createProxyAgent({ uri: proxyUrl }, cookies);
+const agent = new ytdl.createAgent(cookies, { proxy: proxyUrl });
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
@@ -61,7 +61,7 @@ router.post('/download', async (req, res, next) => {
     // Download video-only stream using the proxy and cookies agent
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
-      requestOptions: { agent: ytdlAgent }, // Correct option is 'agent'
+      requestOptions: { agent }, // Correct option is 'agent'
     });
     videoFile = fs.createWriteStream(videoFilePath);
 
@@ -91,7 +91,7 @@ router.post('/download', async (req, res, next) => {
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
-      requestOptions: { agent: ytdlAgent }, // Correct option is 'agent'
+      requestOptions: { agent }, // Correct option is 'agent'
     });
     audioFile = fs.createWriteStream(audioFilePath);
 
@@ -162,6 +162,7 @@ router.post('/download', async (req, res, next) => {
     if (audioFile) audioFile.close();
   }
 });
+
 
 
 
