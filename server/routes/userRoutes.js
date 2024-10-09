@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 dotenv.config();
 import { HttpsProxyAgent } from 'https-proxy-agent'; // Correct proxy package
+import axios from "axios";
 
 const router = express.Router();
 ffmpeg.setFfmpegPath(ffmpegStatic);
