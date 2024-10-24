@@ -4,10 +4,9 @@
   "description": "A youtube playlist downloader",
   "main": "index.js",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "npm run build && npm run server",
+    "build": "cd Client && npm install && npm run build",
+    "server": "cd server && npm install && node index.js"
   },
   "keywords": [],
   "author": "Arian",
