@@ -69,6 +69,8 @@ function Playlists() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [videos, setVideos] = useState([]);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadingVideos, setDownloadingVideos] = useState([]);
+  const [errorVideos, setErrorVideos] = useState([]); // State to track videos with errors
 
   useEffect(() => {
     fetch('/api/playlists', {
@@ -112,115 +114,95 @@ function Playlists() {
       });
   };
 
-  const downloadVideo = (videoId, videoTitle) => {
+  const downloadVideo = async (videoId, videoTitle) => {
     if (!videoId || !videoTitle) {
       console.error('Invalid video ID or title:', videoId, videoTitle);
       return;
     }
 
-    fetch(`/api/download`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
-        videoTitle // Pass the video title to the backend
-      }),
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Failed to download video');
+        // Add video to the downloadingVideos state and remove it from errorVideos state if retrying
+        setDownloadingVideos((prev) => [...prev, videoId]);
+        setErrorVideos((prev) => prev.filter((id) => id !== videoId));
+    
+
+        try {
+          const response = await fetch(`/api/download`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle }),
+          });
+    
+          if (!response.ok) throw new Error('Failed to download video');
+          const blob = await response.blob();
+    
+          // Download the video
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = `${videoTitle}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+          console.error(`Error downloading video "${videoTitle}":`, error);
+    
+          // Add the video to the errorVideos state if there's an error
+          setErrorVideos((prev) => [...prev, videoId]);
+        } finally {
+          // Remove video from the downloadingVideos state after the download is finished
+          setDownloadingVideos((prev) => prev.filter((id) => id !== videoId));
         }
-        return response.blob();
-      })
-      .then(blob => {
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `${videoTitle}.mp4`; // Use the video title for the filename
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-      })
-      .catch(error => {
-        console.error('Error downloading video:', error);
-      });
-  };
+      };
   
-  const downloadAllVideos = async () => {
-    if (videos.length === 0) return;
-  
-    setIsDownloadingAll(true);
-  
-    try {
-      const response = await fetch('/api/download-zip', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ videos: videos.map(video => ({ videoUrl: `https://www.youtube.com/watch?v=${video.id}`, videoTitle: video.title })) }),
-      });
-  
-      if (!response.ok) {
-        throw new Error('Failed to download ZIP file');
-      }
-  
-      // Download the ZIP file
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = 'playlist_videos.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-  
-      // Fetch skipped videos after the download is complete
-      const skippedResponse = await fetch('/api/skipped-videos');
-      const skippedData = await skippedResponse.json();
-      const { skippedVideos } = skippedData;
-  
-      if (skippedVideos && skippedVideos.length > 0) {
-        alert(`The following videos could not be downloaded:\n${skippedVideos.join('\n')}`);
-      } else {
-        alert('All videos downloaded successfully!');
-      }
-    } catch (error) {
-      console.error('Error downloading ZIP file:', error);
-    } finally {
-      setIsDownloadingAll(false);
-    }
-  };
-  
+      const downloadAllVideos = async () => {
+        if (videos.length === 0) return;
+    
+        setIsDownloadingAll(true);
+        setErrorVideos([]); // Clear any previous errors before downloading all videos
+    
+        try {
+          const response = await fetch('/api/download-zip', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ videos: videos.map(video => ({ videoUrl: `https://www.youtube.com/watch?v=${video.id}`, videoTitle: video.title })) }),
+          });
+    
+          if (!response.ok) throw new Error('Failed to download ZIP file');
+    
+          const blob = await response.blob();
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = 'playlist_videos.zip';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+          console.error('Error downloading ZIP file:', error);
+        } finally {
+          setIsDownloadingAll(false);
+        }
+      };
   
   
   return (
     <div className="d-flex flex-row container left-container">
-      {/* Left Section: Playlists */}
-      <div className="playlists-container">
+      <div className="playlists-container fade-in">
         <h2 className="mb-4 mt-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
         <div className="row">
           {playlists.map((playlist, index) => (
-            <div
-              key={playlist.id}
-              className={`col-md-4 col-lg-4 mb-4 d-flex align-items-stretch fade-in`}
-              style={{ animationDelay: `${index * 0.1}s`, opacity: playlist.isVisible ? 1 : 0 }}
-            >
-              <div className="card">
-                <img
-                  src={playlist.thumbnails?.high.url}
-                  className="card-img"
-                  alt={`${playlist.title} Thumbnail`}
-                />
+            <div key={playlist.id} className="col-md-4 col-lg-4 mb-4 d-flex align-items-stretch fade-in">
+              <div className="card w-100">
+                <img src={playlist.thumbnails?.high?.url} className="card-img" alt={`${playlist.title} Thumbnail`} />
                 <div className="card-body select">
                   <h5 className="card-title text-center">{playlist.title}</h5>
-                  <button
-                    className="btn card-button mt-2"
-                    onClick={() => fetchVideos(playlist.id)}
-                  >
+                  <button className="btn card-button mt-2" onClick={() => fetchVideos(playlist.id)}>
                     View Playlist
                   </button>
                 </div>
@@ -231,33 +213,28 @@ function Playlists() {
       </div>
 
       {/* Right Section: Videos in Playlist */}
-      <div className="videos-container">
+      <div className="videos-container fade-in">
         <h2 className='row ps-2' style={{ color: '#F72585' }}>Videos in Playlist</h2>
         {selectedPlaylist && videos.length > 0 ? (
           <>
-            <button
-              className="btn btn-success mb-3"
-              onClick={downloadAllVideos}
-              disabled={isDownloadingAll}
-            >
+            <button className="btn btn-success mb-3" onClick={downloadAllVideos} disabled={isDownloadingAll}>
               {isDownloadingAll ? 'Downloading...' : 'Download All Videos'}
             </button>
             <div className="list-group">
               {videos.map((video, index) => (
-                <div
-                  key={video.id}
-                  className={`list-group-item d-flex align-items-center fade-in`}
-                  style={{ animationDelay: `${index * 0.1}s`, opacity: video.isVisible ? 1 : 0 }}
-                >
-                  <img
-                    src={video.thumbnail}
-                    alt={`${video.title} Thumbnail`}
-                    className="img-thumbnail mr-3"
-                    style={{ width: '80px' }}
-                  />
+                <div key={video.id} className="list-group-item d-flex align-items-center fade-in">
+                  <img src={video.thumbnail} alt={`${video.title} Thumbnail`} className="img-thumbnail mr-3" style={{ width: '80px' }} />
                   <div className="flex-grow-1 p-2">{video.title}</div>
-                  <button className="btn btn-primary ml-auto col-3" onClick={() => downloadVideo(video.id, video.title)}>
-                    Download Video
+                  <button
+                    className={`btn ml-auto col-3 ${errorVideos.includes(video.id) ? 'btn-danger' : 'btn-primary'}`}
+                    onClick={() => downloadVideo(video.id, video.title)}
+                    disabled={downloadingVideos.includes(video.id)} // Disable button while downloading
+                  >
+                    {downloadingVideos.includes(video.id)
+                      ? 'Downloading...'
+                      : errorVideos.includes(video.id)
+                      ? 'Unavailable'
+                      : 'Download Video'}
                   </button>
                 </div>
               ))}
