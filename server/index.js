@@ -141,7 +141,7 @@ app.get(
 app.get(
   "/auth/google/secrets",
   passport.authenticate("google", {
-    successRedirect: "http://localhost:3000/secrets",
+    successRedirect: "https://yumu-4843fa0b7770.herokuapp.com/secrets",
     failureRedirect: "/login",
   })
 );
@@ -225,6 +225,9 @@ passport.use(
       userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     async (accessToken, refreshToken, profile, done) => {
+      console.log('Access Token:', accessToken);
+      console.log('Refresh Token:', refreshToken);
+      console.log('Profile:', profile);
       try {
         const result = await db.query("SELECT * FROM users WHERE email = $1", [
           profile.email,
