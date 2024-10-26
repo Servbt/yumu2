@@ -53,6 +53,8 @@ app.use(express.static(path.join(__dirname, '../Client/build')));
 app.use(passport.initialize());
 app.use(passport.session());
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 
 const db = new pg.Client({
   connectionString: isProduction ? process.env.DATABASE_URL : undefined,
