@@ -39,7 +39,7 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: 'http://localhost:3000', // Your React app's URL
+  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com/'], // Your React app's URL
   methods: 'GET,POST',
   allowedHeaders: ['Content-Type', 'Content-Disposition'],
   exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
@@ -219,7 +219,9 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "http://localhost:5000/auth/google/secrets",
+      callbackURL: isProduction
+        ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+        : "http://localhost:5000/auth/google/secrets",
       userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     async (accessToken, refreshToken, profile, done) => {
