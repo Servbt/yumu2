@@ -39,7 +39,7 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com/'], // Your React app's URL
+  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com/'], 
   methods: 'GET,POST',
   allowedHeaders: ['Content-Type', 'Content-Disposition'],
   exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
@@ -141,7 +141,7 @@ app.get(
 app.get(
   "/auth/google/secrets",
   passport.authenticate("google", {
-    successRedirect: "http://localhost:3000/secrets", // Redirect to your React app's secrets page
+    successRedirect: "http://localhost:3000/secrets",
     failureRedirect: "/login",
   })
 );
