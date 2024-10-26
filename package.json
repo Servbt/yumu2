@@ -1,25 +1,30 @@
 {
   "name": "yumu2",
   "version": "1.0.0",
-  "description": "A YouTube playlist downloader",
+  "description": "A youtube playlist downloader",
   "main": "server/index.js",
+  "engines": {
+    "node": ">=20.9",  
+    "npm": ">=10.8"      
+  },
   "scripts": {
-    "start": "node server/index.js", 
+    "start": "node server/index.js",
     "heroku-postbuild": "cd Client && npm install && npm run build"
   },
-  "dependencies": {
-    "express": "^4.17.1",
-    "bcrypt": "^5.0.1",
-    "body-parser": "^1.19.0",
-    "pg": "^8.6.0",
-    "passport": "^0.4.1",
-    "passport-local": "^1.0.0",
-    "passport-google-oauth2": "^0.2.0",
-    "dotenv": "^10.0.0",
-    "concurrently": "^9.0.1",  
-    "cors": "^2.8.5"
-  },
+"dependencies": {
+  "express": "^4.17.1",
+  "express-session": "^1.17.1",
+  "bcrypt": "^5.1.1",
+  "body-parser": "^1.19.0",
+  "pg": "^8.13.1",
+  "passport": "^0.4.1",
+  "passport-google-oauth2": "^0.2.0",
+  "passport-local": "^1.0.0",
+  "dotenv": "^10.0.0",
+  "cors": "^2.8.5"
+},
   "devDependencies": {
-    "nodemon": "^2.0.7"
+    "concurrently": "^9.0.1",
+    "nodemon": "^2.0.22"
   }
 }

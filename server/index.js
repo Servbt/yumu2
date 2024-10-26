@@ -53,15 +53,19 @@ app.use(express.static(path.join(__dirname, '../Client/build')));
 app.use(passport.initialize());
 app.use(passport.session());
 
+
 const db = new pg.Client({
-  user: process.env.PG_USER,
-  host: process.env.PG_HOST,
-  database: process.env.PG_DATABASE,
-  password: process.env.PG_PASSWORD,
-  port: process.env.PG_PORT,
+  connectionString: isProduction ? process.env.DATABASE_URL : undefined,
+  user: isProduction ? undefined : process.env.PG_USER,
+  host: isProduction ? undefined : process.env.PG_HOST,
+  database: isProduction ? undefined : process.env.PG_DATABASE,
+  password: isProduction ? undefined : process.env.PG_PASSWORD,
+  port: isProduction ? undefined : process.env.PG_PORT,
+  ssl: isProduction ? { rejectUnauthorized: false } : false, 
 });
 
 db.connect();
+
 
 // for download routes
 app.use('/api', userRoutes);
