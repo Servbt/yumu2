@@ -20,7 +20,12 @@ function App() {
   }, []);
 
   const handleLogin = () => {
-    window.location.href = 'http://localhost:5000/auth/google';
+    const baseURL =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:5000'
+        : 'https://yumu-4843fa0b7770.herokuapp.com/';
+    
+    window.location.href = `${baseURL}/auth/google`;
   };
 
   return (
