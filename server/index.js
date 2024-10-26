@@ -10,6 +10,13 @@ import env from "dotenv";
 import { google } from 'googleapis';
 import cors from 'cors';
 import userRoutes from './routes/userRoutes.js';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
 
 
 const app = express();
@@ -40,7 +47,8 @@ app.use(cors({
 }));
 
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public"));
+// app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, '../Client/build')));
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -52,6 +60,7 @@ const db = new pg.Client({
   password: process.env.PG_PASSWORD,
   port: process.env.PG_PORT,
 });
+
 db.connect();
 
 // for download routes
