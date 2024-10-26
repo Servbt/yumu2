@@ -1,18 +1,25 @@
 {
   "name": "yumu2",
   "version": "1.0.0",
-  "description": "A youtube playlist downloader",
-  "main": "index.js",
-"scripts": {
-  "start": "concurrently \"npm run server\" \"npm run client\"",
-  "server": "cd server && npm install && node index.js",
-  "client": "cd Client && npm install && npm start",
-  "build": "cd Client && npm install && npm run build"
-},
-  "keywords": [],
-  "author": "Arian",
-  "license": "ISC",
+  "description": "A YouTube playlist downloader",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js", 
+    "heroku-postbuild": "cd Client && npm install && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "bcrypt": "^5.0.1",
+    "body-parser": "^1.19.0",
+    "pg": "^8.6.0",
+    "passport": "^0.4.1",
+    "passport-local": "^1.0.0",
+    "passport-google-oauth2": "^0.2.0",
+    "dotenv": "^10.0.0",
+    "concurrently": "^9.0.1",  
+    "cors": "^2.8.5"
+  },
   "devDependencies": {
-    "concurrently": "^9.0.1"
+    "nodemon": "^2.0.7"
   }
 }

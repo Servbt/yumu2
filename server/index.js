@@ -66,6 +66,12 @@ db.connect();
 // for download routes
 app.use('/api', userRoutes);
 
+// Fallback route: for any unknown route
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
+});
+
+
 
 //  solely checks authentication
 app.get('/api/authenticated', (req, res) => {
