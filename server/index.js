@@ -36,18 +36,24 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 
-app.use(session({
-  store: new pgSession({
-    conObject: {
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },  
+app.use(
+  session({
+    store: new pgSession({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
+      },
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production', // Enable secure cookies in production
+      sameSite: 'none', // For cross-site cookies in production
     },
-    createTableIfMissing: true
-  }),
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-}));
+  })
+);
+
 
 
 app.use(cors({
