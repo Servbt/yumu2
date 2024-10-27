@@ -12,7 +12,9 @@ import cors from 'cors';
 import userRoutes from './routes/userRoutes.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
-const pgSession = require('connect-pg-simple')(session);
+import connectPgSimple from 'connect-pg-simple';
+const pgSession = connectPgSimple(session);
+
 
 
 const __filename = fileURLToPath(import.meta.url);
