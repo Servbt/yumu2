@@ -28,7 +28,7 @@ app.use(express.json());
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  "http://localhost:3000/auth/google/secrets"
+  "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
 );
 
 
@@ -39,7 +39,7 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com/'], 
+  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com'], 
   methods: 'GET,POST',
   allowedHeaders: ['Content-Type', 'Content-Disposition'],
   exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
@@ -138,13 +138,12 @@ app.get(
   })
 );
 
-app.get(
-  "/auth/google/secrets",
-  passport.authenticate("google", {
-    successRedirect: "https://yumu-4843fa0b7770.herokuapp.com/secrets",
-    failureRedirect: "/login",
-  })
-);
+app.get('/auth/google/secrets', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect to secrets page or wherever.
+    res.redirect('/secrets');
+  });
 
 
 app.post(
