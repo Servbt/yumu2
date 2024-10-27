@@ -95,8 +95,13 @@ app.get('*', (req, res) => {
 
 //  solely checks authentication
 app.get('/api/authenticated', (req, res) => {
-  res.json({ isAuthenticated: req.isAuthenticated() });
+  if (req.isAuthenticated()) {
+    res.json({ isAuthenticated: true });
+  } else {
+    res.json({ isAuthenticated: false });
+  }
 });
+
 
 //  endpoint to fetch playlists
 app.get('/api/playlists', async (req, res, next) => {
