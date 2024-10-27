@@ -12,6 +12,8 @@ import cors from 'cors';
 import userRoutes from './routes/userRoutes.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
+const pgSession = require('connect-pg-simple')(session);
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,9 +35,15 @@ const oauth2Client = new google.auth.OAuth2(
 
 
 app.use(session({
+  store: new pgSession({
+    conObject: {
+      connectionString: process.env.DATABASE_URL,
+    },
+    createTableIfMissing: true  
+  }),
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
 }));
 
 app.use(cors({
