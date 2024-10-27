@@ -12,7 +12,6 @@ import cors from 'cors';
 import userRoutes from './routes/userRoutes.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import PgSession from 'connect-pg-simple';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,18 +33,10 @@ const oauth2Client = new google.auth.OAuth2(
 
 
 app.use(session({
-  store: new (PgSession(session))({
-    conObject: {
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    },
-  }),
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: false,
-  cookie: { secure: true }  // Use true in production with HTTPS
+  saveUninitialized: true,
 }));
-
 
 app.use(cors({
   origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com/'], 
