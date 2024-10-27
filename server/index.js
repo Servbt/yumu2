@@ -75,7 +75,9 @@ const db = new pg.Client({
   database: isProduction ? undefined : process.env.PG_DATABASE,
   password: isProduction ? undefined : process.env.PG_PASSWORD,
   port: isProduction ? undefined : process.env.PG_PORT,
-  ssl: isProduction ? { rejectUnauthorized: false } : false, 
+  ssl: {
+    rejectUnauthorized: false,  // This forces SSL with relaxed security to prevent the "no pg_hba.conf entry" error
+  }, 
 });
 
 db.connect();
