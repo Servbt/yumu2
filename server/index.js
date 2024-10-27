@@ -40,13 +40,15 @@ app.use(session({
   store: new pgSession({
     conObject: {
       connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },  
     },
-    createTableIfMissing: true  
+    createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
 }));
+
 
 app.use(cors({
   origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com'], 
