@@ -10,6 +10,7 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
+const youtubeCookies = '__Secure-3PSID=g.a000nAhmL430KfGTC1aaC7AugYI0JSopptyYvaQlfKEJqgKKBUEyghMfjOQ5fe105CJlVSEg5AACgYKAfISARESFQHGX2MiHKKdg7zoYMl1deBAHoJhzBoVAUF8yKr6_aCvw-gp4igcUHUwJDyz0076;__Secure-1PSIDTS=sidts-CjIBQT4rX6qm3s8eYAI1YQeg0M_sf0Y_tlFhgQcc8buob8RoB9jHwkJ1HI6sPItsMyzr6xAA;CONSISTENCY=AKreu9vy5wQvVmLl6WN7QAEYm8LJ5jOscjaB8NL6Tl5tD9XCyzgxur4GYsYh6sbQgqM6hpNXZj_Wczo841vNyv56cCIM-kZWYQ_0rUvOmh2KZCxrKJlbG4SHERk;__Secure-3PAPISID=va_4ErOk65wO3PID/AB-ph7lABzFc5Thio;__Secure-3PSIDCC=AKEyXzWkA4vP67f32yOVGJBTnoweF3IdWO7k36koJrip78Ym9z6SA-nSrQxcoA98TvqUz-atpgI;__Secure-3PSIDTS=sidts-CjIBQT4rX6qm3s8eYAI1YQeg0M_sf0Y_tlFhgQcc8buob8RoB9jHwkJ1HI6sPItsMyzr6xAA;LOGIN_INFO=AFmmF2swRQIhAIzdWM_7ljhwtkV2Q27UMX_uW-a0QNBW64ajmG4fueiLAiAXPYXbDutMrcTVlP7hHgM_EvaVQ9QnFc3jYP_dCFdLyA:QUQ3MjNmeVJZQTZiRlpoWjM1YjU5RTZVMDByc1RRRzVCdFljTUVRWUw2ZWE4Mk84b2FuQTQtbkplYW1zU0tjNmNlYVR1ak8yR2FvLVlMSGVqRllVVk9ZMDVkc0FmTXpQUlFZeFNScWZCR1Q3aHlxRUJkTmc3aDBwazVoUVBPdWpRRmRuTlY3czNjNlIyLXFiOVpwRkRkNm53Q25iWFpzZjB3;PREF=f6=40000080&f7=1c100&tz=America.New_York&f5=30000;YT_CL={"loctok":"ACih6ZNLdo_vEOcdtf4y82WR5lJtG-wco3u61yNpuAUr-59GT_4rqVIlcK64C99stiw_uoa8ZQ_x0Wu-tA5p9bGG0iyNHv2jeJc"}';
 
 
 
@@ -32,13 +33,7 @@ router.post('/download', async (req, res, next) => {
   }
 
   try {
-    // Get the OAuth access token (use the one obtained during user login)
-    // const oauth2Client = new google.auth.OAuth2();
-    // oauth2Client.setCredentials({
-    //   access_token: req.user.accessToken,  // Use the access token from your app
-    //   refresh_token: req.user.refreshToken,  // Use the refresh token for long-lived sessions
-    // });
-
+    // Sanitize the video title for a valid filename
     const sanitizedTitle = sanitizeFileName(videoTitle);
     const downloadDir = path.join(__dirname, 'downloads');
 
@@ -51,17 +46,26 @@ router.post('/download', async (req, res, next) => {
     const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
     const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
 
-    // Download video-only stream using OAuth token
+    // Download video-only stream
     const videoStream = ytdl(videoUrl, {
       filter: 'videoonly',
       requestOptions: {
         headers: {
-          // 'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
-        },
-      },
+          'Cookie': youtubeCookies,
+          referer: 'https://www.youtube.com/',
+          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+      }
+    });
+    const videoFile = fs.createWriteStream(videoFilePath);
+
+    videoStream.on('error', (error) => {
+      console.error('Error downloading video stream:', error.message);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
+      }
     });
 
-    const videoFile = fs.createWriteStream(videoFilePath);
     videoStream.pipe(videoFile);
 
     await new Promise((resolve, reject) => {
@@ -69,18 +73,27 @@ router.post('/download', async (req, res, next) => {
       videoFile.on('error', reject);
     });
 
-    // Download audio-only stream using OAuth token
+    // Download audio-only stream
     const audioStream = ytdl(videoUrl, {
       filter: 'audioonly',
       quality: 'highestaudio',
       requestOptions: {
         headers: {
-          // 'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
-        },
-      },
+          'Cookie': youtubeCookies,
+          referer: 'https://www.youtube.com/',
+          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+      }
+    });
+    const audioFile = fs.createWriteStream(audioFilePath);
+
+    audioStream.on('error', (error) => {
+      console.error('Error downloading audio stream:', error.message);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: `Failed to download audio stream: ${videoTitle}` });
+      }
     });
 
-    const audioFile = fs.createWriteStream(audioFilePath);
     audioStream.pipe(audioFile);
 
     await new Promise((resolve, reject) => {
@@ -97,24 +110,28 @@ router.post('/download', async (req, res, next) => {
         .videoCodec('copy')
         .audioCodec('aac')
         .on('end', () => {
+          // Clean up temporary files
           fs.unlinkSync(videoFilePath);
           fs.unlinkSync(audioFilePath);
           resolve();
         })
-        .on('error', reject)
+        .on('error', (err) => {
+          console.error('Error merging video and audio:', err);
+          reject(new Error('Error merging video and audio'));
+        })
         .run();
     });
 
-    // Send the merged file for download
+    // Set the Content-Disposition header with the correct filename
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.mp4"`);
     res.download(outputFilePath, (err) => {
       if (err) {
         console.error('Error sending file:', err);
-        return next(err);
+        return next(err); // Pass the error to the global error handler
       }
-      fs.unlinkSync(outputFilePath);  // Optionally delete the file after download
+      // Optionally delete the file after download
+      fs.unlinkSync(outputFilePath);
     });
-
   } catch (err) {
     console.error('Error processing video:', err);
     if (!res.headersSent) {
@@ -122,7 +139,6 @@ router.post('/download', async (req, res, next) => {
     }
   }
 });
-
 
 
 // Endpoint to fetch all videos from a specific playlist
