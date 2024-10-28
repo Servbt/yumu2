@@ -200,7 +200,7 @@ app.post("/register", async (req, res , next) => {
   }
 });
 
-// Serve React app
+// Serve React app to handle any route
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
 });
