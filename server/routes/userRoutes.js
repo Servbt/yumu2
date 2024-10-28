@@ -33,11 +33,11 @@ router.post('/download', async (req, res, next) => {
 
   try {
     // Get the OAuth access token (use the one obtained during user login)
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({
-      access_token: req.user.accessToken,  // Use the access token from your app
-      refresh_token: req.user.refreshToken,  // Use the refresh token for long-lived sessions
-    });
+    // const oauth2Client = new google.auth.OAuth2();
+    // oauth2Client.setCredentials({
+    //   access_token: req.user.accessToken,  // Use the access token from your app
+    //   refresh_token: req.user.refreshToken,  // Use the refresh token for long-lived sessions
+    // });
 
     const sanitizedTitle = sanitizeFileName(videoTitle);
     const downloadDir = path.join(__dirname, 'downloads');
