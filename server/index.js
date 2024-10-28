@@ -39,7 +39,7 @@ app.use(session({
   store: new pgSession({
     conObject: {
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },  
+      ssl: { rejectUnauthorized: false },
     },
     createTableIfMissing: true
   }),
@@ -50,7 +50,7 @@ app.use(session({
 
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com'], 
+  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com'],
   methods: 'GET,POST',
   allowedHeaders: ['Content-Type', 'Content-Disposition'],
   exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
@@ -76,7 +76,7 @@ const db = new pg.Client({
   port: isProduction ? undefined : process.env.PG_PORT,
   ssl: {
     rejectUnauthorized: false,  // This forces SSL with relaxed security to prevent the "no pg_hba.conf entry" error
-  }, 
+  },
 });
 
 db.connect();
@@ -105,6 +105,9 @@ app.get('/api/playlists', async (req, res, next) => {
         access_token: req.user.accessToken,
         refresh_token: req.user.refreshToken,
       });
+
+      // Automatically refresh the access token if it's expired
+      await oauth2Client.getAccessToken();
 
       const youtube = google.youtube({
         version: 'v3',
@@ -150,9 +153,9 @@ app.get(
   })
 );
 
-app.get('/auth/google/secrets', 
+app.get('/auth/google/secrets',
   passport.authenticate('google', { failureRedirect: '/login' }),
-  function(req, res) {
+  function (req, res) {
     // Successful authentication, redirect to secrets page or wherever.
     res.redirect('/secrets');
   });
@@ -167,7 +170,7 @@ app.post(
 );
 
 // just emails and passwords
-app.post("/register", async (req, res , next) => {
+app.post("/register", async (req, res, next) => {
   const email = req.body.username;
   const password = req.body.password;
 
@@ -178,7 +181,7 @@ app.post("/register", async (req, res , next) => {
 
     if (checkResult.rows.length > 0) {
       res.redirect("/login");
-    }  else {
+    } else {
       bcrypt.hash(password, saltRounds, async (err, hash) => {
         if (err) {
           console.error("Error hashing password:", err);
