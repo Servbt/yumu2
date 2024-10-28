@@ -10,7 +10,6 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
-const youtubeCookies = '__Secure-3PSID=g.a000nAhmL430KfGTC1aaC7AugYI0JSopptyYvaQlfKEJqgKKBUEyghMfjOQ5fe105CJlVSEg5AACgYKAfISARESFQHGX2MiHKKdg7zoYMl1deBAHoJhzBoVAUF8yKr6_aCvw-gp4igcUHUwJDyz0076;__Secure-1PSIDTS=sidts-CjIBQT4rX6qm3s8eYAI1YQeg0M_sf0Y_tlFhgQcc8buob8RoB9jHwkJ1HI6sPItsMyzr6xAA;CONSISTENCY=AKreu9vy5wQvVmLl6WN7QAEYm8LJ5jOscjaB8NL6Tl5tD9XCyzgxur4GYsYh6sbQgqM6hpNXZj_Wczo841vNyv56cCIM-kZWYQ_0rUvOmh2KZCxrKJlbG4SHERk;__Secure-3PAPISID=va_4ErOk65wO3PID/AB-ph7lABzFc5Thio;__Secure-3PSIDCC=AKEyXzWkA4vP67f32yOVGJBTnoweF3IdWO7k36koJrip78Ym9z6SA-nSrQxcoA98TvqUz-atpgI;__Secure-3PSIDTS=sidts-CjIBQT4rX6qm3s8eYAI1YQeg0M_sf0Y_tlFhgQcc8buob8RoB9jHwkJ1HI6sPItsMyzr6xAA;LOGIN_INFO=AFmmF2swRQIhAIzdWM_7ljhwtkV2Q27UMX_uW-a0QNBW64ajmG4fueiLAiAXPYXbDutMrcTVlP7hHgM_EvaVQ9QnFc3jYP_dCFdLyA:QUQ3MjNmeVJZQTZiRlpoWjM1YjU5RTZVMDByc1RRRzVCdFljTUVRWUw2ZWE4Mk84b2FuQTQtbkplYW1zU0tjNmNlYVR1ak8yR2FvLVlMSGVqRllVVk9ZMDVkc0FmTXpQUlFZeFNScWZCR1Q3aHlxRUJkTmc3aDBwazVoUVBPdWpRRmRuTlY3czNjNlIyLXFiOVpwRkRkNm53Q25iWFpzZjB3;PREF=f6=40000080&f7=1c100&tz=America.New_York&f5=30000;YT_CL={"loctok":"ACih6ZNLdo_vEOcdtf4y82WR5lJtG-wco3u61yNpuAUr-59GT_4rqVIlcK64C99stiw_uoa8ZQ_x0Wu-tA5p9bGG0iyNHv2jeJc"}';
 
 
 
@@ -47,16 +46,7 @@ router.post('/download', async (req, res, next) => {
     const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
 
     // Download video-only stream
-    const videoStream = ytdl(videoUrl, {
-      filter: 'videoonly',
-      requestOptions: {
-        headers: {
-          'Cookie': youtubeCookies,
-          referer: 'https://www.youtube.com/',
-          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        }
-      }
-    });
+    const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
     const videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
@@ -74,17 +64,7 @@ router.post('/download', async (req, res, next) => {
     });
 
     // Download audio-only stream
-    const audioStream = ytdl(videoUrl, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      requestOptions: {
-        headers: {
-          'Cookie': youtubeCookies,
-          referer: 'https://www.youtube.com/',
-          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        }
-      }
-    });
+    const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
     const audioFile = fs.createWriteStream(audioFilePath);
 
     audioStream.on('error', (error) => {
@@ -228,16 +208,7 @@ router.post('/download-zip', async (req, res) => {
         const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
     
         // Download video-only stream
-        const videoStream = ytdl(videoUrl, {
-          filter: 'videoonly',
-          requestOptions: {
-            headers: {
-              'Cookie': youtubeCookies,
-              referer: 'https://www.youtube.com/',
-              // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Use a common user agent to mimic a browser
-            }
-          }
-        });
+        const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
         const videoFile = fs.createWriteStream(videoFilePath);
     
         videoStream.on('error', (error) => {
@@ -264,17 +235,7 @@ router.post('/download-zip', async (req, res) => {
         });
     
         // Download audio-only stream
-        const audioStream = ytdl(videoUrl, {
-          filter: 'audioonly',
-          quality: 'highestaudio',
-          requestOptions: {
-            headers: {
-              'Cookie': youtubeCookies,
-              referer: 'https://www.youtube.com/',
-              // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            }
-          }
-        });
+        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
         const audioFile = fs.createWriteStream(audioFilePath);
     
         audioStream.on('error', (error) => {
