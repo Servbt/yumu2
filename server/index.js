@@ -167,6 +167,7 @@ app.post(
   })
 );
 
+// just emails and passwords
 app.post("/register", async (req, res , next) => {
   const email = req.body.username;
   const password = req.body.password;
