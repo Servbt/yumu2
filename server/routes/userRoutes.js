@@ -10,6 +10,18 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
+import cookiesJSON  from './cookies.json'
+
+
+// Function to format cookies
+function formatCookies(cookiesJSON) {
+  return cookiesJSON.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+}
+
+// Get the formatted
+const youtubeCookies = formatCookies(cookiesJSON);
+
+console.log('Formatted Cookies:', youtubeCookies);
 
 
 const router = express.Router();
@@ -45,7 +57,15 @@ router.post('/download', async (req, res, next) => {
     const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
 
     // Download video-only stream
-    const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
+    const videoStream = ytdl(videoUrl, {
+      filter: 'videoonly',
+      requestOptions: {
+        headers: {
+          'Cookie': youtubeCookies,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+      }
+    });
     const videoFile = fs.createWriteStream(videoFilePath);
 
     videoStream.on('error', (error) => {
@@ -63,7 +83,16 @@ router.post('/download', async (req, res, next) => {
     });
 
     // Download audio-only stream
-    const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
+    const audioStream = ytdl(videoUrl, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      requestOptions: {
+        headers: {
+          'Cookie': youtubeCookies,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+      }
+    });
     const audioFile = fs.createWriteStream(audioFilePath);
 
     audioStream.on('error', (error) => {
@@ -207,7 +236,15 @@ router.post('/download-zip', async (req, res) => {
         const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
     
         // Download video-only stream
-        const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
+        const videoStream = ytdl(videoUrl, {
+          filter: 'videoonly',
+          requestOptions: {
+            headers: {
+              'Cookie': youtubeCookies,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Use a common user agent to mimic a browser
+            }
+          }
+        });
         const videoFile = fs.createWriteStream(videoFilePath);
     
         videoStream.on('error', (error) => {
@@ -234,7 +271,16 @@ router.post('/download-zip', async (req, res) => {
         });
     
         // Download audio-only stream
-        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
+        const audioStream = ytdl(videoUrl, {
+          filter: 'audioonly',
+          quality: 'highestaudio',
+          requestOptions: {
+            headers: {
+              'Cookie': youtubeCookies,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            }
+          }
+        });
         const audioFile = fs.createWriteStream(audioFilePath);
     
         audioStream.on('error', (error) => {
