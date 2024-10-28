@@ -52,7 +52,7 @@ router.post('/download', async (req, res, next) => {
       requestOptions: {
         headers: {
           // 'Cookie': youtubeCookies,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         }
       }
     });
@@ -79,7 +79,7 @@ router.post('/download', async (req, res, next) => {
       requestOptions: {
         headers: {
           // 'Cookie': youtubeCookies,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         }
       }
     });
@@ -231,7 +231,7 @@ router.post('/download-zip', async (req, res) => {
           requestOptions: {
             headers: {
               // 'Cookie': youtubeCookies,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Use a common user agent to mimic a browser
+              // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Use a common user agent to mimic a browser
             }
           }
         });
@@ -267,7 +267,7 @@ router.post('/download-zip', async (req, res) => {
           requestOptions: {
             headers: {
               // 'Cookie': youtubeCookies,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              // 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             }
           }
         });
