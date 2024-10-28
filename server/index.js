@@ -200,6 +200,11 @@ app.post("/register", async (req, res , next) => {
   }
 });
 
+// Serve React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
+});
+
 passport.use(
   "local",
   new Strategy(async function verify(username, password, done) {
@@ -283,10 +288,7 @@ app.use((err, req, res, next) => {
   res.status(500).send('Something broke!');
 });
 
-// Serve React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
-});
+
 
 
 app.listen(port, () => {
