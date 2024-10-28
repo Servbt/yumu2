@@ -10,7 +10,7 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
-import cookiesJSON  from './cookies.json'
+import cookiesJSON  from '../cookies.json'
 
 
 // Function to format cookies
