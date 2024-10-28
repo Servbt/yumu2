@@ -56,7 +56,7 @@ router.post('/download', async (req, res, next) => {
       filter: 'videoonly',
       requestOptions: {
         headers: {
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
+          // 'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
         },
       },
     });
@@ -75,7 +75,7 @@ router.post('/download', async (req, res, next) => {
       quality: 'highestaudio',
       requestOptions: {
         headers: {
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
+          // 'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
         },
       },
     });
