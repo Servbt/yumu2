@@ -10,19 +10,8 @@ import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properl
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
-import cookiesJSON from './cookies.json' assert { type: 'json' };
+const youtubeCookies = '__Secure-3PSID=g.a000nAhmL430KfGTC1aaC7AugYI0JSopptyYvaQlfKEJqgKKBUEyghMfjOQ5fe105CJlVSEg5AACgYKAfISARESFQHGX2MiHKKdg7zoYMl1deBAHoJhzBoVAUF8yKr6_aCvw-gp4igcUHUwJDyz0076;__Secure-1PSIDTS=sidts-CjIBQT4rX0Ge8m84SaLxuMKfLMD7-7ql63LMeUniuqcTDb0COZYqoKGPgNUGWwXu4ddBaRAA;__Secure-3PAPISID=va_4ErOk65wO3PID/AB-ph7lABzFc5Thio;__Secure-3PSIDCC=AKEyXzXUcXlW9Su04sRk3w4YxE4vaCbwf3Z0Dh-yR65Jd5vWLiZ8LltG9M4Mmk8LfUB4Nn04xo8;__Secure-3PSIDTS=sidts-CjIBQT4rX0Ge8m84SaLxuMKfLMD7-7ql63LMeUniuqcTDb0COZYqoKGPgNUGWwXu4ddBaRAA;LOGIN_INFO=AFmmF2swRQIhAIzdWM_7ljhwtkV2Q27UMX_uW-a0QNBW64ajmG4fueiLAiAXPYXbDutMrcTVlP7hHgM_EvaVQ9QnFc3jYP_dCFdLyA:QUQ3MjNmeVJZQTZiRlpoWjM1YjU5RTZVMDByc1RRRzVCdFljTUVRWUw2ZWE4Mk84b2FuQTQtbkplYW1zU0tjNmNlYVR1ak8yR2FvLVlMSGVqRllVVk9ZMDVkc0FmTXpQUlFZeFNScWZCR1Q3aHlxRUJkTmc3aDBwazVoUVBPdWpRRmRuTlY3czNjNlIyLXFiOVpwRkRkNm53Q25iWFpzZjB3;PREF=f6=40000080&f7=1c100&tz=America.New_York&f5=30000;YT_CL={"loctok":"ACih6ZNLdo_vEOcdtf4y82WR5lJtG-wco3u61yNpuAUr-59GT_4rqVIlcK64C99stiw_uoa8ZQ_x0Wu-tA5p9bGG0iyNHv2jeJc"}';
 
-
-
-// Function to format cookies
-function formatCookies(cookiesJSON) {
-  return cookiesJSON.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-}
-
-// Get the formatted
-const youtubeCookies = formatCookies(cookiesJSON);
-
-console.log('Formatted Cookies:', youtubeCookies);
 
 
 const router = express.Router();
