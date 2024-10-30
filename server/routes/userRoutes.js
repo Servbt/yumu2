@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
 
+const youtubeCookies = '__Secure-3PSID=g.a000nAhmL430KfGTC1aaC7AugYI0JSopptyYvaQlfKEJqgKKBUEyghMfjOQ5fe105CJlVSEg5AACgYKAfISARESFQHGX2MiHKKdg7zoYMl1deBAHoJhzBoVAUF8yKr6_aCvw-gp4igcUHUwJDyz0076;__Secure-1PSIDTS=sidts-CjIBQT4rX6xT28KQnGkhbGC6GyLuaGcS7OPFZj5wDv9tk16C7QukJxb-liELKQCz3wa9EBAA;__Secure-3PAPISID=va_4ErOk65wO3PID/AB-ph7lABzFc5Thio;__Secure-3PSIDCC=AKEyXzVcgfbJN6eQpY3LZV6xoACI4a49PfXwxiIcDY6BfnZ55XjRPQzbVFPeHvKnAWSAGsPCAsc;__Secure-3PSIDTS=sidts-CjIBQT4rX6xT28KQnGkhbGC6GyLuaGcS7OPFZj5wDv9tk16C7QukJxb-liELKQCz3wa9EBAA;LOGIN_INFO=AFmmF2swRQIhAIzdWM_7ljhwtkV2Q27UMX_uW-a0QNBW64ajmG4fueiLAiAXPYXbDutMrcTVlP7hHgM_EvaVQ9QnFc3jYP_dCFdLyA:QUQ3MjNmeVJZQTZiRlpoWjM1YjU5RTZVMDByc1RRRzVCdFljTUVRWUw2ZWE4Mk84b2FuQTQtbkplYW1zU0tjNmNlYVR1ak8yR2FvLVlMSGVqRllVVk9ZMDVkc0FmTXpQUlFZeFNScWZCR1Q3aHlxRUJkTmc3aDBwazVoUVBPdWpRRmRuTlY3czNjNlIyLXFiOVpwRkRkNm53Q25iWFpzZjB3;PREF=f6=40000080&f7=1c100&tz=America.New_York&f5=30000;YT_CL={"loctok":"ACih6ZNLdo_vEOcdtf4y82WR5lJtG-wco3u61yNpuAUr-59GT_4rqVIlcK64C99stiw_uoa8ZQ_x0Wu-tA5p9bGG0iyNHv2jeJc"}'; // Replace with your YouTube session cookies
 
 
 const router = express.Router();
@@ -63,10 +64,10 @@ router.post('/download', async (req, res, next) => {
       filter: 'videoonly',
       requestOptions: {
         headers: {
-          referer: 'https://www.youtube.com/',
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
-        },
-      },
+          'Cookie': youtubeCookies,  // Pass cookies to mimic a logged-in user
+          'Authorization': `Bearer ${req.user.accessToken}` // Pass the OAuth token as well
+        }
+      }
     });
 
     const videoFile = fs.createWriteStream(videoFilePath);
@@ -96,10 +97,10 @@ router.post('/download', async (req, res, next) => {
       quality: 'highestaudio',
       requestOptions: {
         headers: {
-          referer: 'https://www.youtube.com/',
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
-        },
-      },
+          'Cookie': youtubeCookies,  // Pass cookies to mimic a logged-in user
+          'Authorization': `Bearer ${req.user.accessToken}`  // Pass OAuth token here too
+        }
+      }
     });
     const audioFile = fs.createWriteStream(audioFilePath);
 
