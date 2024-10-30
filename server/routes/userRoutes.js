@@ -36,8 +36,8 @@ router.post('/download', async (req, res, next) => {
     // OAuth access token (use the one at login)
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({
-      access_token: req.user.accessToken,  
-      refresh_token: req.user.refreshToken,  
+      access_token: req.user.accessToken,
+      refresh_token: req.user.refreshToken,
     });
 
     // Sanitize the video title for a valid filename
@@ -52,6 +52,11 @@ router.post('/download', async (req, res, next) => {
     const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
     const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
     const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
+
+    // Download video-only stream
+    console.log('Sending video request with headers:', {
+      'Authorization': `Bearer ${req.user.accessToken}`,
+    });
 
     // Download video-only stream
     const videoStream = ytdl(videoUrl, {
@@ -77,6 +82,11 @@ router.post('/download', async (req, res, next) => {
     await new Promise((resolve, reject) => {
       videoFile.on('finish', resolve);
       videoFile.on('error', reject);
+    });
+
+    // Download audio-only stream using OAuth token
+    console.log('Sending audio request with headers:', {
+      'Authorization': `Bearer ${req.user.accessToken}`,
     });
 
     // Download audio-only stream using OAuth token
