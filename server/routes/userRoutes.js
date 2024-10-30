@@ -63,6 +63,7 @@ router.post('/download', async (req, res, next) => {
       filter: 'videoonly',
       requestOptions: {
         headers: {
+          referer: 'https://www.youtube.com/',
           'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
         },
       },
@@ -95,6 +96,7 @@ router.post('/download', async (req, res, next) => {
       quality: 'highestaudio',
       requestOptions: {
         headers: {
+          referer: 'https://www.youtube.com/',
           'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
         },
       },

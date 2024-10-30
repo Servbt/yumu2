@@ -106,8 +106,6 @@ app.get('/api/playlists', async (req, res, next) => {
         refresh_token: req.user.refreshToken,
       });
 
-      // Automatically refresh the access token if it's expired
-      await oauth2Client.getAccessToken();
 
       const youtube = google.youtube({
         version: 'v3',
