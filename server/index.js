@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
+env.config();
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,22 +26,41 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 5000;
 const saltRounds = 10;
-env.config();
 app.use(express.json());
+
+const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
+  process.env.NODE_ENV === 'production'
+    ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+    : "http://localhost:5000/auth/google/secrets"
+);
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+  googleCallbackUrl
 );
 
+const isProduction = process.env.NODE_ENV === 'production';
+const clientBaseUrl = isProduction
+  ? "https://yumu-4843fa0b7770.herokuapp.com"
+  : "http://localhost:3000";
+const dbConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: isProduction ? { rejectUnauthorized: false } : false,
+    }
+  : {
+      user: process.env.PG_USER,
+      host: process.env.PG_HOST,
+      database: process.env.PG_DATABASE,
+      password: process.env.PG_PASSWORD,
+      port: process.env.PG_PORT,
+      ssl: false,
+    };
 
 app.use(session({
   store: new pgSession({
-    conObject: {
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    },
+    conObject: dbConfig,
     createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET,
@@ -59,24 +79,16 @@ app.use(cors({
 
 app.use(bodyParser.urlencoded({ extended: true }));
 // app.use(express.static("public"));
-app.use(express.static(path.join(__dirname, '../Client/build')));
+if (isProduction) {
+  app.use(express.static(path.join(__dirname, '../Client/build')));
+}
 
 app.use(passport.initialize());
 app.use(passport.session());
 
-const isProduction = process.env.NODE_ENV === 'production';
-
 
 const db = new pg.Client({
-  connectionString: isProduction ? process.env.DATABASE_URL : undefined,
-  user: isProduction ? undefined : process.env.PG_USER,
-  host: isProduction ? undefined : process.env.PG_HOST,
-  database: isProduction ? undefined : process.env.PG_DATABASE,
-  password: isProduction ? undefined : process.env.PG_PASSWORD,
-  port: isProduction ? undefined : process.env.PG_PORT,
-  ssl: {
-    rejectUnauthorized: false,  // This forces SSL with relaxed security to prevent the "no pg_hba.conf entry" error
-  },
+  ...dbConfig,
 });
 
 db.connect();
@@ -100,6 +112,10 @@ app.get('/api/authenticated', (req, res) => {
 app.get('/api/playlists', async (req, res, next) => {
   if (req.isAuthenticated()) {
     try {
+      if (!req.user?.accessToken && !req.user?.refreshToken) {
+        return res.status(401).json({ error: 'Google login expired. Please sign in again.' });
+      }
+
       // Use the stored OAuth2 client and tokens
       oauth2Client.setCredentials({
         access_token: req.user.accessToken,
@@ -129,6 +145,9 @@ app.get('/api/playlists', async (req, res, next) => {
       res.json({ playlists });
     } catch (err) {
       console.error('Error fetching YouTube playlists:', err);
+      if (err?.code === 401 || err?.response?.status === 401) {
+        return res.status(401).json({ error: 'Google login expired. Please sign in again.' });
+      }
       res.status(500).json({ error: 'Failed to fetch playlists' });
     }
   } else {
@@ -150,21 +169,23 @@ app.get(
   "/auth/google",
   passport.authenticate("google", {
     scope: ["profile", "email", "https://www.googleapis.com/auth/youtube.readonly"],
+    accessType: "offline",
+    prompt: "consent",
   })
 );
 
 app.get('/auth/google/secrets',
   passport.authenticate('google', { failureRedirect: '/login' }),
   function (req, res) {
-    // Successful authentication, redirect to secrets page or wherever.
-    res.redirect('/secrets');
+    // After auth, send the user back to the frontend app.
+    res.redirect(clientBaseUrl);
   });
 
 
 app.post(
   "/login",
   passport.authenticate("local", {
-    successRedirect: "/secrets",
+    successRedirect: clientBaseUrl,
     failureRedirect: "/login",
   })
 );
@@ -193,7 +214,7 @@ app.post("/register", async (req, res, next) => {
           const user = result.rows[0];
           req.login(user, (err) => {
             console.log("success");
-            res.redirect("/secrets");
+            res.redirect(clientBaseUrl);
           });
         }
       });
@@ -203,10 +224,12 @@ app.post("/register", async (req, res, next) => {
   }
 });
 
-// Serve React app to handle any route
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
-});
+// Serve the built React app in production only.
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
+  });
+}
 
 passport.use(
   "local",
@@ -239,9 +262,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: isProduction
-        ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
-        : "http://localhost:5000/auth/google/secrets",
+      callbackURL: googleCallbackUrl,
       userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     async (accessToken, refreshToken, profile, done) => {

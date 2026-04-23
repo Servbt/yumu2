@@ -5,6 +5,7 @@ import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
 
   useEffect(() => {
     fetch('/api/authenticated', {
@@ -30,6 +31,7 @@ function App() {
   }, []);
 
   const handleLogin = () => {
+    setAuthMessage('');
     const baseURL =
       window.location.hostname === 'localhost'
         ? 'http://localhost:5000'
@@ -42,11 +44,17 @@ function App() {
     <div>
       <div className="container mt-5">
         {isAuthenticated ? (
-          <Playlists />
+          <Playlists
+            onAuthExpired={(message) => {
+              setIsAuthenticated(false);
+              setAuthMessage(message || 'Please sign in again.');
+            }}
+          />
         ) : (
           <div className="hero">
             <h1>Yumu</h1>
             <p className='select'>Your simple way to download YouTube playlists. No hassle, No BS. 🎶</p>
+            {authMessage && <p className="select text-danger">{authMessage}</p>}
             <button className="login-button" onClick={handleLogin}>
               Login with Google
             </button>
@@ -79,13 +87,21 @@ function App() {
   );
 }
 
-function Playlists() {
+function Playlists({ onAuthExpired }) {
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [videos, setVideos] = useState([]);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadingVideos, setDownloadingVideos] = useState([]);
   const [errorVideos, setErrorVideos] = useState([]); // State to track videos with errors
+  const [playlistError, setPlaylistError] = useState('');
+  const [skippedVideos, setSkippedVideos] = useState([]);
+  const [downloadStatus, setDownloadStatus] = useState({
+    active: false,
+    mode: null,
+    title: null,
+    message: '',
+  });
 
   useEffect(() => {
     fetch('/api/playlists', {
@@ -93,17 +109,73 @@ function Playlists() {
     })
       .then(response => {
         if (response.status === 401) {
-          window.location.href = '/auth/google';
+          return response.json().then((data) => {
+            onAuthExpired(data?.error || 'Google login expired. Please sign in again.');
+            return null;
+          });
+        }
+        if (!response.ok) {
+          throw new Error('Failed to fetch playlists');
         }
         return response.json();
       })
       .then(data => {
-        setPlaylists(data.playlists);
+        if (!data) {
+          return;
+        }
+        if (Array.isArray(data.playlists)) {
+          setPlaylists(data.playlists);
+          setPlaylistError('');
+        } else {
+          setPlaylists([]);
+          setPlaylistError(data.error || 'Playlists were unavailable.');
+        }
       })
       .catch(error => {
         console.error('Error fetching playlists:', error);
+        setPlaylists([]);
+        setPlaylistError('Unable to load playlists right now.');
       });
   }, []);
+
+  useEffect(() => {
+    if (!isDownloadingAll && downloadingVideos.length === 0) {
+      setDownloadStatus({
+        active: false,
+        mode: null,
+        title: null,
+        message: '',
+      });
+      return undefined;
+    }
+
+    const pollStatus = () => {
+      fetch('/api/download-status', {
+        credentials: 'include',
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch download status');
+          }
+          return response.json();
+        })
+        .then(data => {
+          setDownloadStatus({
+            active: Boolean(data?.active),
+            mode: data?.mode || null,
+            title: data?.title || null,
+            message: data?.message || '',
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching download status:', error);
+        });
+    };
+
+    pollStatus();
+    const intervalId = window.setInterval(pollStatus, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isDownloadingAll, downloadingVideos]);
 
   const fetchVideos = (playlistId) => {
     fetch(`/api/playlist/${playlistId}/videos`, {
@@ -119,6 +191,7 @@ function Playlists() {
         if (data && data.videos) {
           setVideos(data.videos);
           setSelectedPlaylist(playlistId);
+          setSkippedVideos([]);
         } else {
           setVideos([]); // Set an empty array if videos are not available
         }
@@ -126,6 +199,24 @@ function Playlists() {
       .catch(error => {
         console.error('Error fetching videos:', error);
         setVideos([]); // Set an empty array in case of error
+      });
+  };
+
+  const refreshSkippedVideos = () => {
+    fetch('/api/skipped-videos', {
+      credentials: 'include',
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch skipped videos');
+        }
+        return response.json();
+      })
+      .then(data => {
+        setSkippedVideos(Array.isArray(data?.skippedVideos) ? data.skippedVideos : []);
+      })
+      .catch(error => {
+        console.error('Error fetching skipped videos:', error);
       });
   };
 
@@ -138,6 +229,12 @@ function Playlists() {
         // Add video to the downloadingVideos state and remove it from errorVideos state if retrying
         setDownloadingVideos((prev) => [...prev, videoId]);
         setErrorVideos((prev) => prev.filter((id) => id !== videoId));
+        setDownloadStatus({
+          active: true,
+          mode: 'single',
+          title: videoTitle,
+          message: `Downloading ${videoTitle}`,
+        });
     
 
         try {
@@ -169,6 +266,11 @@ function Playlists() {
         } finally {
           // Remove video from the downloadingVideos state after the download is finished
           setDownloadingVideos((prev) => prev.filter((id) => id !== videoId));
+          setDownloadStatus((prev) => (
+            prev.mode === 'single' && prev.title === videoTitle
+              ? { active: false, mode: null, title: null, message: '' }
+              : prev
+          ));
         }
       };
   
@@ -177,6 +279,13 @@ function Playlists() {
     
         setIsDownloadingAll(true);
         setErrorVideos([]); // Clear any previous errors before downloading all videos
+        setSkippedVideos([]);
+        setDownloadStatus({
+          active: true,
+          mode: 'playlist',
+          title: null,
+          message: 'Preparing playlist download...',
+        });
     
         try {
           const response = await fetch('/api/download-zip', {
@@ -201,7 +310,9 @@ function Playlists() {
         } catch (error) {
           console.error('Error downloading ZIP file:', error);
         } finally {
+          refreshSkippedVideos();
           setIsDownloadingAll(false);
+          setDownloadStatus({ active: false, mode: null, title: null, message: '' });
         }
       };
   
@@ -210,6 +321,7 @@ function Playlists() {
     <div className="d-flex flex-row container left-container">
       <div className="playlists-container fade-in">
         <h2 className="mb-4 mt-4 text-center" style={{ color: '#4CC9F0' }}>Your YouTube Playlists</h2>
+        {playlistError && <p className="select text-danger">{playlistError}</p>}
         <div className="row">
           {playlists.map((playlist, index) => (
             <div key={playlist.id} className="col-md-4 col-lg-4 mb-4 d-flex align-items-stretch fade-in">
@@ -230,11 +342,32 @@ function Playlists() {
       {/* Right Section: Videos in Playlist */}
       <div className="videos-container fade-in">
         <h2 className='row ps-2' style={{ color: '#F72585' }}>Videos in Playlist</h2>
+        {downloadStatus.active && (
+          <p className="select mb-3">
+            {downloadStatus.title
+              ? `Now downloading: ${downloadStatus.title}`
+              : downloadStatus.message}
+          </p>
+        )}
         {selectedPlaylist && videos.length > 0 ? (
           <>
             <button className="btn btn-success mb-3" onClick={downloadAllVideos} disabled={isDownloadingAll}>
               {isDownloadingAll ? 'Downloading...' : 'Download All Videos'}
             </button>
+            {skippedVideos.length > 0 && (
+              <details className="mb-3">
+                <summary className="select">
+                  Couldn&apos;t download {skippedVideos.length} video{skippedVideos.length === 1 ? '' : 's'}
+                </summary>
+                <div className="list-group mt-2">
+                  {skippedVideos.map((title, index) => (
+                    <div key={`${title}-${index}`} className="list-group-item">
+                      {title}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
             <div className="list-group">
               {videos.map((video, index) => (
                 <div key={video.id} className="list-group-item d-flex align-items-center fade-in">

@@ -1,12 +1,9 @@
 // authRoutes.js
 import express from "express";
 import fs from 'fs';
-import ytdl from '@distube/ytdl-core';
-const { UnrecoverableError } = ytdl; // Extract UnrecoverableError from the default export
-
-import ffmpeg from 'fluent-ffmpeg';
+import os from 'os';
 import path from 'path';
-import ffmpegStatic from 'ffmpeg-static'; // Required for ffmpeg to work properly
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
@@ -14,12 +11,193 @@ import archiver from "archiver";
 
 
 const router = express.Router();
-ffmpeg.setFfmpegPath(ffmpegStatic); // Set the path for ffmpeg
-
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
+const desktopDir = path.join(os.homedir(), 'Desktop');
+const ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+const downloadStatuses = new Map();
+
+function ensureDownloadDir() {
+  if (!fs.existsSync(downloadDir)) {
+    fs.mkdirSync(downloadDir, { recursive: true });
+  }
+}
+
+function findDownloadedFile(outputTemplate) {
+  const expectedMp4 = outputTemplate.replace('.%(ext)s', '.mp4');
+  if (fs.existsSync(expectedMp4)) {
+    return expectedMp4;
+  }
+
+  const prefix = path.basename(outputTemplate).replace('.%(ext)s', '');
+  const matches = fs
+    .readdirSync(downloadDir)
+    .filter((file) => file.startsWith(prefix))
+    .map((file) => path.join(downloadDir, file));
+
+  if (!matches.length) {
+    throw new Error(`yt-dlp did not create an output file for ${prefix}`);
+  }
+
+  return matches[0];
+}
+
+function runYtDlp(videoUrl, outputTemplate) {
+  ensureDownloadDir();
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-m',
+      'yt_dlp',
+      '--no-progress',
+      '--no-warnings',
+      '--format',
+      'bv*+ba/b',
+      '--merge-output-format',
+      'mp4',
+      '--output',
+      outputTemplate,
+      videoUrl,
+    ];
+
+    const child = spawn('python', args, {
+      cwd: downloadDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
+        return;
+      }
+
+      try {
+        resolve(findDownloadedFile(outputTemplate));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function transcodeToCompatibleMp4(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y',
+      '-i',
+      inputPath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      outputPath,
+    ];
+
+    const child = spawn(ffmpegPath, args, {
+      cwd: downloadDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+        return;
+      }
+      resolve(outputPath);
+    });
+  });
+}
+
+async function ensureCompatibleVideo(filePath, sanitizedTitle) {
+  const compatiblePath = path.join(downloadDir, `${sanitizedTitle}.compatible.mp4`);
+  await transcodeToCompatibleMp4(filePath, compatiblePath);
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  return compatiblePath;
+}
+
+function writeSkippedVideosReport(skippedTitles) {
+  ensureDownloadDir();
+
+  if (!fs.existsSync(desktopDir)) {
+    return null;
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const reportPath = path.join(desktopDir, `yumu-skipped-videos-${timestamp}.txt`);
+  const lines = skippedTitles.length
+    ? [
+        'The following videos could not be downloaded:',
+        '',
+        ...skippedTitles.map((title, index) => `${index + 1}. ${title}`),
+      ]
+    : [
+        'All videos in the playlist downloaded successfully.',
+      ];
+
+  fs.writeFileSync(reportPath, `${lines.join('\r\n')}\r\n`, 'utf8');
+  return reportPath;
+}
+
+function setDownloadStatus(sessionId, status) {
+  if (!sessionId) {
+    return;
+  }
+  downloadStatuses.set(sessionId, {
+    active: false,
+    mode: null,
+    title: null,
+    message: '',
+    ...status,
+  });
+}
+
+function clearDownloadStatus(sessionId) {
+  if (!sessionId) {
+    return;
+  }
+  downloadStatuses.set(sessionId, {
+    active: false,
+    mode: null,
+    title: null,
+    message: '',
+  });
+}
+
+router.get('/download-status', (req, res) => {
+  res.json(downloadStatuses.get(req.sessionID) || {
+    active: false,
+    mode: null,
+    title: null,
+    message: '',
+  });
+});
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
@@ -27,116 +205,37 @@ router.post('/download', async (req, res, next) => {
   console.log('Received video URL:', videoUrl);
   console.log('Received video title:', videoTitle);
 
-  if (!videoUrl || !ytdl.validateURL(videoUrl)) {
+  if (!videoUrl || !videoUrl.includes('youtube.com/watch')) {
     return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
 
   try {
-
-    // OAuth access token (use the one at login)
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({
-      access_token: req.user.accessToken,  
-      refresh_token: req.user.refreshToken,  
-    });
-
     // Sanitize the video title for a valid filename
     const sanitizedTitle = sanitizeFileName(videoTitle);
-    const downloadDir = path.join(__dirname, 'downloads');
-
-    // Ensure the downloads directory exists
-    if (!fs.existsSync(downloadDir)) {
-      fs.mkdirSync(downloadDir);
-    }
-
-    const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
-    const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
-    const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-
-    // Download video-only stream
-    const videoStream = ytdl(videoUrl, {
-      filter: 'videoonly',
-      requestOptions: {
-        headers: {
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Pass the OAuth token here
-        },
-      },
+    setDownloadStatus(req.sessionID, {
+      active: true,
+      mode: 'single',
+      title: videoTitle,
+      message: `Downloading ${videoTitle}`,
     });
-
-    const videoFile = fs.createWriteStream(videoFilePath);
-
-    videoStream.on('error', (error) => {
-      console.error('Error downloading video stream:', error.message);
-      if (!res.headersSent) {
-        return res.status(500).json({ error: `Failed to download video stream: ${videoTitle}` });
-      }
-    });
-
-    videoStream.pipe(videoFile);
-
-    await new Promise((resolve, reject) => {
-      videoFile.on('finish', resolve);
-      videoFile.on('error', reject);
-    });
-
-    // Download audio-only stream using OAuth token
-    const audioStream = ytdl(videoUrl, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      requestOptions: {
-        headers: {
-          'Authorization': `Bearer ${req.user.accessToken}`,  // Use OAuth token here too
-        },
-      },
-    });
-    const audioFile = fs.createWriteStream(audioFilePath);
-
-    audioStream.on('error', (error) => {
-      console.error('Error downloading audio stream:', error.message);
-      if (!res.headersSent) {
-        return res.status(500).json({ error: `Failed to download audio stream: ${videoTitle}` });
-      }
-    });
-
-    audioStream.pipe(audioFile);
-
-    await new Promise((resolve, reject) => {
-      audioFile.on('finish', resolve);
-      audioFile.on('error', reject);
-    });
-
-    // Merge video and audio using ffmpeg
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(videoFilePath)
-        .input(audioFilePath)
-        .output(outputFilePath)
-        .videoCodec('copy')
-        .audioCodec('aac')
-        .on('end', () => {
-          // Clean up temporary files
-          fs.unlinkSync(videoFilePath);
-          fs.unlinkSync(audioFilePath);
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('Error merging video and audio:', err);
-          reject(new Error('Error merging video and audio'));
-        })
-        .run();
-    });
+    const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
+    const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
+    const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
 
     // Set the Content-Disposition header with the correct filename
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.mp4"`);
     res.download(outputFilePath, (err) => {
       if (err) {
+        clearDownloadStatus(req.sessionID);
         console.error('Error sending file:', err);
         return next(err); // Pass the error to the global error handler
       }
       // Optionally delete the file after download
       fs.unlinkSync(outputFilePath);
+      clearDownloadStatus(req.sessionID);
     });
   } catch (err) {
+    clearDownloadStatus(req.sessionID);
     console.error('Error processing video:', err);
     if (!res.headersSent) {
       return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
@@ -213,98 +312,36 @@ router.post('/download-zip', async (req, res) => {
   }
 
   try {
-    const downloadDir = path.join(__dirname, 'downloads');
-    if (!fs.existsSync(downloadDir)) {
-      fs.mkdirSync(downloadDir);
-    }
+    ensureDownloadDir();
 
     const downloadedFiles = [];
     skippedVideos = []; // Reset skippedVideos for this request
+    setDownloadStatus(req.sessionID, {
+      active: true,
+      mode: 'playlist',
+      title: null,
+      message: 'Preparing playlist download...',
+    });
 
     for (const video of videos) {
       const { videoUrl, videoTitle } = video;
       console.log(`Processing video: ${videoTitle}`);
 
       try {
+        setDownloadStatus(req.sessionID, {
+          active: true,
+          mode: 'playlist',
+          title: videoTitle,
+          message: `Downloading ${videoTitle}`,
+        });
         const sanitizedTitle = sanitizeFileName(videoTitle);
-        const videoFilePath = path.join(downloadDir, `${sanitizedTitle}_video.mp4`);
-        const audioFilePath = path.join(downloadDir, `${sanitizedTitle}_audio.m4a`);
-        const outputFilePath = path.join(downloadDir, `${sanitizedTitle}.mp4`);
-
-        // Download video-only stream
-        const videoStream = ytdl(videoUrl, { filter: 'videoonly' });
-        const videoFile = fs.createWriteStream(videoFilePath);
-
-        videoStream.on('error', (error) => {
-          // Check if error is a 401 (Unauthorized) error or other unrecoverable errors
-          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
-            skippedVideos.push(videoTitle);
-            videoFile.close();
-            if (fs.existsSync(videoFilePath)) {
-              fs.unlinkSync(videoFilePath);
-            }
-            return;
-          } else {
-            console.error(`Error downloading video stream for ${videoTitle}:`, error);
-            throw error; // Propagate other errors
-          }
-        });
-
-        videoStream.pipe(videoFile);
-
-        await new Promise((resolve, reject) => {
-          videoFile.on('finish', resolve);
-          videoFile.on('error', reject);
-        });
-
-        // Download audio-only stream
-        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
-        const audioFile = fs.createWriteStream(audioFilePath);
-
-        audioStream.on('error', (error) => {
-          if (error && (error.statusCode === 401 || error.message.includes('This video is unavailable') || error.message.includes('Video unavailable'))) {
-            console.warn(`Skipping unavailable or unauthorized audio for video: ${videoTitle}`);
-            skippedVideos.push(videoTitle);
-            audioFile.close();
-            if (fs.existsSync(audioFilePath)) {
-              fs.unlinkSync(audioFilePath);
-            }
-            return;
-          } else {
-            console.error(`Error downloading audio stream for ${videoTitle}:`, error);
-            throw error; // Propagate other errors
-          }
-        });
-
-        audioStream.pipe(audioFile);
-
-        await new Promise((resolve, reject) => {
-          audioFile.on('finish', resolve);
-          audioFile.on('error', reject);
-        });
-
-        // Merge video and audio using ffmpeg
-        await new Promise((resolve, reject) => {
-          ffmpeg()
-            .input(videoFilePath)
-            .input(audioFilePath)
-            .output(outputFilePath)
-            .videoCodec('copy')
-            .audioCodec('aac')
-            .on('end', () => {
-              fs.unlinkSync(videoFilePath);
-              fs.unlinkSync(audioFilePath);
-              downloadedFiles.push({ path: outputFilePath, name: `${sanitizedTitle}.mp4` });
-              resolve();
-            })
-            .on('error', reject)
-            .run();
-        });
+        const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
+        const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
+        const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
+        downloadedFiles.push({ path: outputFilePath, name: `${sanitizedTitle}.mp4` });
 
       } catch (err) {
-        // Additional error handling if needed
-        if (err && (err.statusCode === 401 || err.message.includes('This video is unavailable') || err.message.includes('Video unavailable'))) {
+        if (err && (err.message.includes('Video unavailable') || err.message.includes('Private video') || err.message.includes('Sign in to confirm'))) {
           console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
           skippedVideos.push(videoTitle);
         } else {
@@ -314,9 +351,13 @@ router.post('/download-zip', async (req, res) => {
       }
     }
 
-
-    const zipFilePath = path.join(downloadDir, `playlist_videos.zip`);
     // Create a ZIP archive of the downloaded files
+    setDownloadStatus(req.sessionID, {
+      active: true,
+      mode: 'playlist',
+      title: null,
+      message: 'Creating playlist ZIP...',
+    });
     const archive = archiver('zip', { zlib: { level: 9 } });
     res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
     res.setHeader('Content-Type', 'application/zip');
@@ -331,9 +372,15 @@ router.post('/download-zip', async (req, res) => {
 
     // Clean up downloaded files after sending the ZIP file
     archive.on('end', () => {
+      const reportPath = writeSkippedVideosReport(skippedVideos);
+      if (reportPath) {
+        console.log(`Skipped videos report saved to ${reportPath}`);
+      }
       downloadedFiles.forEach(file => fs.unlinkSync(file.path));
+      clearDownloadStatus(req.sessionID);
     });
   } catch (err) {
+    clearDownloadStatus(req.sessionID);
     console.error('Error processing playlist:', err);
     res.status(500).json({ error: 'An error occurred while processing the playlist.' });
   }
