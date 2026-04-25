@@ -19,6 +19,7 @@ const downloadDir = path.join(__dirname, 'downloads');
 const desktopDir = path.join(os.homedir(), 'Desktop');
 const ffmpegPath = ffmpegStatic;
 const downloadStatuses = new Map();
+let decodedCookiesPath = null;
 
 function createGoogleOAuthClient() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -46,6 +47,26 @@ function ensureDownloadDir() {
   }
 }
 
+function getYtDlpCookiesPath() {
+  if (process.env.YT_DLP_COOKIES_PATH) {
+    return process.env.YT_DLP_COOKIES_PATH;
+  }
+
+  if (!process.env.YT_DLP_COOKIES_B64) {
+    return null;
+  }
+
+  ensureDownloadDir();
+
+  if (!decodedCookiesPath) {
+    decodedCookiesPath = path.join(downloadDir, 'youtube-cookies.txt');
+    fs.writeFileSync(decodedCookiesPath, Buffer.from(process.env.YT_DLP_COOKIES_B64, 'base64'));
+    fs.chmodSync(decodedCookiesPath, 0o600);
+  }
+
+  return decodedCookiesPath;
+}
+
 function findDownloadedFile(outputTemplate) {
   const expectedMp4 = outputTemplate.replace('.%(ext)s', '.mp4');
   if (fs.existsSync(expectedMp4)) {
@@ -69,6 +90,7 @@ function runYtDlp(videoUrl, outputTemplate) {
   ensureDownloadDir();
 
   return new Promise((resolve, reject) => {
+    const cookiesPath = getYtDlpCookiesPath();
     const args = [
       '-m',
       'yt_dlp',
@@ -80,6 +102,7 @@ function runYtDlp(videoUrl, outputTemplate) {
       'mp4',
       '--output',
       outputTemplate,
+      ...(cookiesPath ? ['--cookies', cookiesPath] : []),
       videoUrl,
     ];
 
