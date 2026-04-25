@@ -20,6 +20,7 @@ const desktopDir = path.join(os.homedir(), 'Desktop');
 const ffmpegPath = ffmpegStatic;
 const downloadStatuses = new Map();
 let decodedCookiesPath = null;
+let loggedCookieStatus = false;
 
 function createGoogleOAuthClient() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -49,10 +50,12 @@ function ensureDownloadDir() {
 
 function getYtDlpCookiesPath() {
   if (process.env.YT_DLP_COOKIES_PATH) {
+    logCookieStatus(process.env.YT_DLP_COOKIES_PATH, 'YT_DLP_COOKIES_PATH');
     return process.env.YT_DLP_COOKIES_PATH;
   }
 
   if (!process.env.YT_DLP_COOKIES_B64) {
+    logCookieStatus(null, 'none');
     return null;
   }
 
@@ -64,7 +67,37 @@ function getYtDlpCookiesPath() {
     fs.chmodSync(decodedCookiesPath, 0o600);
   }
 
+  logCookieStatus(decodedCookiesPath, 'YT_DLP_COOKIES_B64');
   return decodedCookiesPath;
+}
+
+function logCookieStatus(cookiesPath, source) {
+  if (loggedCookieStatus) {
+    return;
+  }
+
+  loggedCookieStatus = true;
+
+  if (!cookiesPath) {
+    console.warn('yt-dlp cookies are not configured. Set YT_DLP_COOKIES_B64 or YT_DLP_COOKIES_PATH on Render.');
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(cookiesPath, 'utf8');
+    const nonCommentLines = content
+      .split(/\r?\n/)
+      .filter((line) => line.trim() && !line.startsWith('#'));
+    const hasYoutubeCookie = /(^|\t)\.?(youtube|google)\.com\t/i.test(content);
+    const hasAuthCookie = /(SID|LOGIN_INFO|SAPISID|APISID|HSID)/.test(content);
+
+    console.log(
+      `yt-dlp cookies configured from ${source}: ${nonCommentLines.length} cookie rows, ` +
+      `youtube/google domains=${hasYoutubeCookie}, auth-like cookies=${hasAuthCookie}`
+    );
+  } catch (err) {
+    console.warn(`yt-dlp cookies configured from ${source}, but could not be read: ${err.message}`);
+  }
 }
 
 function findDownloadedFile(outputTemplate) {
