@@ -19,6 +19,20 @@ const desktopDir = path.join(os.homedir(), 'Desktop');
 const ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
 const downloadStatuses = new Map();
 
+function createGoogleOAuthClient() {
+  const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
+    process.env.NODE_ENV === 'production'
+      ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+      : "http://localhost:5000/auth/google/secrets"
+  );
+
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    googleCallbackUrl
+  );
+}
+
 function ensureDownloadDir() {
   if (!fs.existsSync(downloadDir)) {
     fs.mkdirSync(downloadDir, { recursive: true });
@@ -248,7 +262,11 @@ router.post('/download', async (req, res, next) => {
 router.get('/playlist/:playlistId/videos', async (req, res) => {
   const { playlistId } = req.params;
   try {
-    const oauth2Client = new google.auth.OAuth2();
+    if (!req.isAuthenticated?.() || (!req.user?.accessToken && !req.user?.refreshToken)) {
+      return res.status(401).json({ error: 'Google login expired. Please sign in again.' });
+    }
+
+    const oauth2Client = createGoogleOAuthClient();
     oauth2Client.setCredentials({
       access_token: req.user.accessToken,
       refresh_token: req.user.refreshToken,
@@ -294,6 +312,9 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
     res.json({ videos: allVideos });
   } catch (err) {
     console.error('Error fetching videos from playlist:', err);
+    if (err?.code === 401 || err?.response?.status === 401) {
+      return res.status(401).json({ error: 'Google login expired. Please sign in again.' });
+    }
     res.status(500).json({ error: 'Error fetching videos' });
   }
 });
