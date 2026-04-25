@@ -7,6 +7,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
+import ffmpegStatic from 'ffmpeg-static';
 
 
 
@@ -16,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 const desktopDir = path.join(os.homedir(), 'Desktop');
-const ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+const ffmpegPath = ffmpegStatic;
 const downloadStatuses = new Map();
 
 function createGoogleOAuthClient() {
@@ -82,7 +83,7 @@ function runYtDlp(videoUrl, outputTemplate) {
       videoUrl,
     ];
 
-    const child = spawn('python', args, {
+    const child = spawn(process.env.PYTHON_BIN || 'python3', args, {
       cwd: downloadDir,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
