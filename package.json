@@ -11,6 +11,7 @@
     "start": "node server/index.js",
     "dev": "concurrently \"node server/index.js\" \"npm start --prefix Client\"",
     "render-build": "npm install && npm install --prefix Client && npm run build --prefix Client",
+    "render-start": "test -f Client/build/index.html || npm run build --prefix Client; npm start",
     "heroku-postbuild": "cd Client && npm install && npm run build"
   },
   "dependencies": {
