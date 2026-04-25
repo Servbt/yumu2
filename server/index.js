@@ -19,6 +19,8 @@ env.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const clientBuildDir = path.join(__dirname, '../Client/build');
+const clientIndexPath = path.join(clientBuildDir, 'index.html');
 
 
 
@@ -88,7 +90,7 @@ app.use(cors({
 app.use(bodyParser.urlencoded({ extended: true }));
 // app.use(express.static("public"));
 if (isProduction) {
-  app.use(express.static(path.join(__dirname, '../Client/build')));
+  app.use(express.static(clientBuildDir));
 }
 
 app.use(passport.initialize());
@@ -99,7 +101,16 @@ const db = new pg.Client({
   ...dbConfig,
 });
 
-db.connect();
+async function initializeDatabase() {
+  await db.connect();
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    )
+  `);
+}
 
 
 // for download routes
@@ -236,7 +247,12 @@ app.post("/register", async (req, res, next) => {
 // Serve the built React app in production only.
 if (isProduction) {
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../Client/build', 'index.html'));
+    res.sendFile(clientIndexPath, (err) => {
+      if (err) {
+        console.error(`React build missing at ${clientIndexPath}. Check Render's build command.`);
+        res.status(500).send("React build is missing. Check the Render build command.");
+      }
+    });
   });
 }
 
@@ -326,6 +342,13 @@ app.use((err, req, res, next) => {
 
 
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+initializeDatabase()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database:", err);
+    process.exit(1);
+  });
