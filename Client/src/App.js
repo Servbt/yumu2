@@ -35,7 +35,7 @@ function App() {
     const baseURL =
       window.location.hostname === 'localhost'
         ? 'http://localhost:5000'
-        : 'https://yumu-4843fa0b7770.herokuapp.com';
+        : window.location.origin;
     
     window.location.href = `${baseURL}/auth/google`;
   };

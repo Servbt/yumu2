@@ -20,9 +20,15 @@ const ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
 const downloadStatuses = new Map();
 
 function createGoogleOAuthClient() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const clientBaseUrl = process.env.APP_BASE_URL || (
+    isProduction
+      ? "https://yumu.onrender.com"
+      : "http://localhost:3000"
+  );
   const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
-    process.env.NODE_ENV === 'production'
-      ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+    isProduction
+      ? `${clientBaseUrl}/auth/google/secrets`
       : "http://localhost:5000/auth/google/secrets"
   );
 

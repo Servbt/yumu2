@@ -28,22 +28,30 @@ const port = process.env.PORT || 5000;
 const saltRounds = 10;
 app.use(express.json());
 
+const isProduction = process.env.NODE_ENV === 'production';
+const clientBaseUrl = process.env.APP_BASE_URL || (
+  isProduction
+    ? "https://yumu.onrender.com"
+    : "http://localhost:3000"
+);
 const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
-  process.env.NODE_ENV === 'production'
-    ? "https://yumu-4843fa0b7770.herokuapp.com/auth/google/secrets"
+  isProduction
+    ? `${clientBaseUrl}/auth/google/secrets`
     : "http://localhost:5000/auth/google/secrets"
 );
+const allowedEmails = (process.env.ALLOWED_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  googleCallbackUrl
-);
+function createGoogleOAuthClient() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    googleCallbackUrl
+  );
+}
 
-const isProduction = process.env.NODE_ENV === 'production';
-const clientBaseUrl = isProduction
-  ? "https://yumu-4843fa0b7770.herokuapp.com"
-  : "http://localhost:3000";
 const dbConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
@@ -70,7 +78,7 @@ app.use(session({
 
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yumu-4843fa0b7770.herokuapp.com'],
+  origin: ['http://localhost:3000', clientBaseUrl],
   methods: 'GET,POST',
   allowedHeaders: ['Content-Type', 'Content-Disposition'],
   exposedHeaders: ['Content-Disposition'], // Expose the Content-Disposition header
@@ -117,6 +125,7 @@ app.get('/api/playlists', async (req, res, next) => {
       }
 
       // Use the stored OAuth2 client and tokens
+      const oauth2Client = createGoogleOAuthClient();
       oauth2Client.setCredentials({
         access_token: req.user.accessToken,
         refresh_token: req.user.refreshToken,
@@ -266,10 +275,12 @@ passport.use(
       userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     async (accessToken, refreshToken, profile, done) => {
-      console.log('Access Token:', accessToken);
-      console.log('Refresh Token:', refreshToken);
-      console.log('Profile:', profile);
       try {
+        const email = profile.email?.toLowerCase();
+        if (allowedEmails.length > 0 && !allowedEmails.includes(email)) {
+          return done(null, false, { message: "Email is not allowed for this app." });
+        }
+
         const result = await db.query("SELECT * FROM users WHERE email = $1", [
           profile.email,
         ]);
