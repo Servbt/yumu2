@@ -251,7 +251,12 @@ function streamAndCleanup(res, filePath, fileName, cleanupDir) {
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    pythonBin: process.env.PYTHON_BIN || 'python3',
+    hasCookies: Boolean(process.env.YT_DLP_COOKIES_PATH || process.env.YT_DLP_COOKIES_B64),
+    workRoot,
+  });
 });
 
 app.post('/download', requireWorkerAuth, async (req, res) => {
@@ -266,6 +271,7 @@ app.post('/download', requireWorkerAuth, async (req, res) => {
     const { outputFilePath, fileName } = await downloadSingleVideo(videoUrl, videoTitle, jobDir);
     streamAndCleanup(res, outputFilePath, fileName, jobDir);
   } catch (error) {
+    console.error('Worker single download failed:', error);
     fs.rmSync(jobDir, { recursive: true, force: true });
     res.status(500).json({ error: error.message || 'Worker download failed.' });
   }
@@ -284,6 +290,7 @@ app.post('/download-zip', requireWorkerAuth, async (req, res) => {
     res.setHeader('x-skipped-videos', JSON.stringify(skippedVideos));
     streamAndCleanup(res, zipPath, 'playlist_videos.zip', jobDir);
   } catch (error) {
+    console.error('Worker playlist download failed:', error);
     fs.rmSync(jobDir, { recursive: true, force: true });
     res.status(500).json({ error: error.message || 'Worker playlist download failed.' });
   }
