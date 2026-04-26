@@ -54,7 +54,8 @@ function getYtDlpCookiesPath() {
     return process.env.YT_DLP_COOKIES_PATH;
   }
 
-  if (!process.env.YT_DLP_COOKIES_B64) {
+  const encodedCookies = process.env.YT_DLP_COOKIES_B64?.trim();
+  if (!encodedCookies) {
     logCookieStatus(null, 'none');
     return null;
   }
@@ -63,7 +64,8 @@ function getYtDlpCookiesPath() {
 
   if (!decodedCookiesPath) {
     decodedCookiesPath = path.join(downloadDir, 'youtube-cookies.txt');
-    fs.writeFileSync(decodedCookiesPath, Buffer.from(process.env.YT_DLP_COOKIES_B64, 'base64'));
+    const normalizedBase64 = encodedCookies.replace(/\s+/g, '');
+    fs.writeFileSync(decodedCookiesPath, Buffer.from(normalizedBase64, 'base64'));
     fs.chmodSync(decodedCookiesPath, 0o600);
   }
 

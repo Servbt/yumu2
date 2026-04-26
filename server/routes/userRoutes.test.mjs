@@ -72,6 +72,15 @@ test('server can probe for a JavaScript runtime before invoking yt-dlp', () => {
   );
 });
 
+test('cookie decoding normalizes whitespace in YT_DLP_COOKIES_B64', () => {
+  const body = extractFunctionBody(source, 'function getYtDlpCookiesPath() {');
+  assert.match(
+    body,
+    /encodedCookies\.replace\(\/\\s\+\/g, ''\)/,
+    'cookie decoding should strip whitespace from base64 env input before decoding'
+  );
+});
+
 test('package render-build still installs yt-dlp', () => {
   assert.match(
     packageJson,
