@@ -119,9 +119,22 @@ function findDownloadedFile(outputTemplate) {
   return matches[0];
 }
 
-function runYtDlp(videoUrl, outputTemplate) {
+async function runYtDlp(videoUrl, outputTemplate) {
   ensureDownloadDir();
 
+  try {
+    return await runYtDlpWithFormat(videoUrl, outputTemplate, 'bv*+ba/best');
+  } catch (err) {
+    if (!err.message.includes('Requested format is not available')) {
+      throw err;
+    }
+
+    console.warn('Preferred yt-dlp format unavailable; retrying with best available format.');
+    return runYtDlpWithFormat(videoUrl, outputTemplate, 'best');
+  }
+}
+
+function runYtDlpWithFormat(videoUrl, outputTemplate, format) {
   return new Promise((resolve, reject) => {
     const cookiesPath = getYtDlpCookiesPath();
     const args = [
@@ -130,7 +143,7 @@ function runYtDlp(videoUrl, outputTemplate) {
       '--no-progress',
       '--no-warnings',
       '--format',
-      'bv*+ba/b',
+      format,
       '--merge-output-format',
       'mp4',
       '--output',
