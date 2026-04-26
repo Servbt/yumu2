@@ -129,8 +129,8 @@ async function runYtDlp(videoUrl, outputTemplate) {
       throw err;
     }
 
-    console.warn('Preferred yt-dlp format unavailable; retrying with best available format.');
-    return runYtDlpWithFormat(videoUrl, outputTemplate, 'best');
+    console.warn('Preferred yt-dlp format unavailable; retrying with broader fallback format.');
+    return runYtDlpWithFormat(videoUrl, outputTemplate, 'bestvideo*+bestaudio/best');
   }
 }
 
