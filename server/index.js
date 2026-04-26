@@ -16,6 +16,8 @@ import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
 env.config();
 
+const fetchImpl = globalThis.fetch;
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

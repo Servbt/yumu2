@@ -21,6 +21,74 @@ const ffmpegPath = ffmpegStatic;
 const downloadStatuses = new Map();
 let decodedCookiesPath = null;
 let loggedCookieStatus = false;
+const skippedVideosBySession = new Map();
+
+function getWorkerConfig() {
+  const workerUrl = process.env.DOWNLOADER_WORKER_URL?.trim();
+  const workerSecret = process.env.DOWNLOADER_WORKER_SECRET?.trim();
+  if (!workerUrl || !workerSecret || typeof fetch !== 'function') {
+    return null;
+  }
+
+  return {
+    workerUrl: workerUrl.replace(/\/$/, ''),
+    workerSecret,
+  };
+}
+
+function setSkippedVideos(sessionId, videos) {
+  if (!sessionId) {
+    return;
+  }
+  skippedVideosBySession.set(sessionId, Array.isArray(videos) ? videos : []);
+}
+
+function getSkippedVideos(sessionId) {
+  return skippedVideosBySession.get(sessionId) || [];
+}
+
+async function proxyWorkerDownload(req, res, workerPath, payload, fallbackFilename) {
+  const config = getWorkerConfig();
+  if (!config) {
+    return false;
+  }
+
+  const response = await fetch(`${config.workerUrl}${workerPath}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-worker-secret': config.workerSecret,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Worker request failed with status ${response.status}`);
+  }
+
+  const skippedHeader = response.headers.get('x-skipped-videos');
+  if (skippedHeader) {
+    try {
+      setSkippedVideos(req.sessionID, JSON.parse(skippedHeader));
+    } catch (error) {
+      console.warn('Failed to parse worker skipped videos header:', error.message);
+    }
+  }
+
+  const contentDisposition = response.headers.get('content-disposition');
+  const fileName = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] || fallbackFilename;
+  const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  const arrayBuffer = await response.arrayBuffer();
+  const fileBuffer = Buffer.from(arrayBuffer);
+
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Content-Length', fileBuffer.length);
+  res.send(fileBuffer);
+  return true;
+}
+
 
 function createGoogleOAuthClient() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -374,39 +442,54 @@ router.post('/download', async (req, res, next) => {
     return res.status(400).json({ error: 'Invalid YouTube URL' });
   }
 
-  try {
-    // Sanitize the video title for a valid filename
-    const sanitizedTitle = sanitizeFileName(videoTitle);
-    setDownloadStatus(req.sessionID, {
-      active: true,
-      mode: 'single',
-      title: videoTitle,
-      message: `Downloading ${videoTitle}`,
-    });
-    const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
-    const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
-    const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
+    try {
+      // Sanitize the video title for a valid filename
+      const sanitizedTitle = sanitizeFileName(videoTitle);
+      setSkippedVideos(req.sessionID, []);
+      setDownloadStatus(req.sessionID, {
+        active: true,
+        mode: 'single',
+        title: videoTitle,
+        message: `Downloading ${videoTitle}`,
+      });
 
-    // Set the Content-Disposition header with the correct filename
-    res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.mp4"`);
-    res.download(outputFilePath, (err) => {
-      if (err) {
+      const proxied = await proxyWorkerDownload(
+        req,
+        res,
+        '/download',
+        { videoUrl, videoTitle },
+        `${sanitizedTitle}.mp4`
+      );
+
+      if (proxied) {
         clearDownloadStatus(req.sessionID);
-        console.error('Error sending file:', err);
-        return next(err); // Pass the error to the global error handler
+        return;
       }
-      // Optionally delete the file after download
-      fs.unlinkSync(outputFilePath);
+
+      const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
+      const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
+      const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
+
+      // Set the Content-Disposition header with the correct filename
+      res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.mp4"`);
+      res.download(outputFilePath, (err) => {
+        if (err) {
+          clearDownloadStatus(req.sessionID);
+          console.error('Error sending file:', err);
+          return next(err); // Pass the error to the global error handler
+        }
+        // Optionally delete the file after download
+        fs.unlinkSync(outputFilePath);
+        clearDownloadStatus(req.sessionID);
+      });
+    } catch (err) {
       clearDownloadStatus(req.sessionID);
-    });
-  } catch (err) {
-    clearDownloadStatus(req.sessionID);
-    console.error('Error processing video:', err);
-    if (!res.headersSent) {
-      return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
+      console.error('Error processing video:', err);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: `An error occurred while processing the video: ${videoTitle}` });
+      }
     }
-  }
-});
+  });
 
 
 // Endpoint to fetch all videos from a specific playlist
@@ -472,9 +555,6 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
 
 
 
-// Variable to store skipped videos temporarily
-let skippedVideos = [];
-
 router.post('/download-zip', async (req, res) => {
   const { videos } = req.body;
   console.log('Received videos:', videos);
@@ -485,15 +565,30 @@ router.post('/download-zip', async (req, res) => {
 
   try {
     ensureDownloadDir();
-
-    const downloadedFiles = [];
-    skippedVideos = []; // Reset skippedVideos for this request
+    setSkippedVideos(req.sessionID, []);
     setDownloadStatus(req.sessionID, {
       active: true,
       mode: 'playlist',
       title: null,
       message: 'Preparing playlist download...',
     });
+
+    const proxied = await proxyWorkerDownload(
+      req,
+      res,
+      '/download-zip',
+      { videos },
+      'playlist_videos.zip'
+    );
+
+    if (proxied) {
+      clearDownloadStatus(req.sessionID);
+      return;
+    }
+
+    const downloadedFiles = [];
+    const skippedVideos = [];
+    setSkippedVideos(req.sessionID, skippedVideos);
 
     for (const video of videos) {
       const { videoUrl, videoTitle } = video;
@@ -516,6 +611,7 @@ router.post('/download-zip', async (req, res) => {
         if (err && (err.message.includes('Video unavailable') || err.message.includes('Private video') || err.message.includes('Sign in to confirm'))) {
           console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
           skippedVideos.push(videoTitle);
+          setSkippedVideos(req.sessionID, skippedVideos);
         } else {
           console.error(`Error processing video "${videoTitle}":`, err);
         }
@@ -560,7 +656,7 @@ router.post('/download-zip', async (req, res) => {
 
 // Endpoint to retrieve skipped videos
 router.get('/skipped-videos', (req, res) => {
-  res.json({ skippedVideos });
+  res.json({ skippedVideos: getSkippedVideos(req.sessionID) });
 });
 
 
