@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: yumu2
+    env: node
+    buildCommand: |
+      npm install
+      apt-get update
+      apt-get install -y nodejs npm
+      python3 -m pip install yt-dlp
+      npm install --prefix Client
+      npm run build --prefix Client
+    startCommand: |
+      test -f Client/build/index.html || npm run build --prefix Client
+      npm start

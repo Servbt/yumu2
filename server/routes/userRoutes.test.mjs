@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 
 const source = fs.readFileSync(new URL('./userRoutes.js', import.meta.url), 'utf8');
+const packageJson = fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
+const renderYaml = fs.readFileSync(new URL('../../render.yaml', import.meta.url), 'utf8');
 
 function extractFunctionBody(code, signature) {
   const start = code.indexOf(signature);
@@ -51,5 +53,21 @@ test('selector failures trigger a yt-dlp list-formats probe for diagnostics', ()
     source,
     /function probeYtDlpFormats\(videoUrl, cookiesPath\)[\s\S]*'--list-formats'/,
     'selector failures should trigger a list-formats probe for diagnostics'
+  );
+});
+
+test('Render build installs a JavaScript runtime for yt-dlp signature solving', () => {
+  assert.match(
+    renderYaml,
+    /apt-get install -y nodejs npm/,
+    'Render build should install a JS runtime so yt-dlp can solve YouTube signatures'
+  );
+});
+
+test('package render-build still installs yt-dlp', () => {
+  assert.match(
+    packageJson,
+    /python3 -m pip install yt-dlp/,
+    'render-build should continue installing yt-dlp'
   );
 });
