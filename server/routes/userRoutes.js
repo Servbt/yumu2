@@ -144,8 +144,6 @@ function runYtDlpWithFormat(videoUrl, outputTemplate, format) {
       '--no-warnings',
       '--format',
       format,
-      '--merge-output-format',
-      'mp4',
       '--output',
       outputTemplate,
       ...(cookiesPath ? ['--cookies', cookiesPath] : []),

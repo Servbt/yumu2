@@ -4,10 +4,9 @@ import fs from 'fs';
 
 const source = fs.readFileSync(new URL('./userRoutes.js', import.meta.url), 'utf8');
 
-function extractRunYtDlpBody(code) {
-  const marker = 'async function runYtDlp(videoUrl, outputTemplate) {';
-  const start = code.indexOf(marker);
-  assert.notEqual(start, -1, 'runYtDlp function should exist');
+function extractFunctionBody(code, signature) {
+  const start = code.indexOf(signature);
+  assert.notEqual(start, -1, `${signature} should exist`);
 
   let depth = 0;
   let bodyStart = -1;
@@ -26,14 +25,23 @@ function extractRunYtDlpBody(code) {
     }
   }
 
-  throw new Error('Could not extract runYtDlp body');
+  throw new Error(`Could not extract function body for ${signature}`);
 }
 
 test('runYtDlp uses a merged video+audio selector for the retry fallback', () => {
-  const body = extractRunYtDlpBody(source);
+  const body = extractFunctionBody(source, 'async function runYtDlp(videoUrl, outputTemplate) {');
   assert.match(
     body,
     /runYtDlpWithFormat\(videoUrl, outputTemplate, 'bestvideo\*\+bestaudio\/best'\)/,
     'retry fallback should stay merge-friendly instead of downgrading to plain best'
+  );
+});
+
+test('runYtDlpWithFormat does not force mp4 merge output before later ffmpeg transcoding', () => {
+  const body = extractFunctionBody(source, 'function runYtDlpWithFormat(videoUrl, outputTemplate, format) {');
+  assert.doesNotMatch(
+    body,
+    /'--merge-output-format'/,
+    'yt-dlp invocation should not force mp4 merge output because the file is transcoded later'
   );
 });
