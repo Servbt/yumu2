@@ -3,7 +3,7 @@ import express from "express";
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
@@ -119,6 +119,17 @@ function findDownloadedFile(outputTemplate) {
   return matches[0];
 }
 
+function hasJavaScriptRuntime() {
+  for (const command of ['node', 'nodejs']) {
+    const result = spawnSync(command, ['--version'], { stdio: 'ignore' });
+    if (!result.error && result.status === 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function runYtDlp(videoUrl, outputTemplate) {
   ensureDownloadDir();
 
@@ -149,6 +160,10 @@ function runYtDlpWithFormat(videoUrl, outputTemplate, format) {
       ...(cookiesPath ? ['--cookies', cookiesPath] : []),
       videoUrl,
     ];
+
+    if (!hasJavaScriptRuntime()) {
+      console.warn('No JavaScript runtime detected for yt-dlp challenge solving. YouTube extraction may return only storyboard image formats.');
+    }
 
     const child = spawn(process.env.PYTHON_BIN || 'python3', args, {
       cwd: downloadDir,

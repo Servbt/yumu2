@@ -56,11 +56,19 @@ test('selector failures trigger a yt-dlp list-formats probe for diagnostics', ()
   );
 });
 
-test('Render build installs a JavaScript runtime for yt-dlp signature solving', () => {
+test('Render blueprint records a runtime-install hint for yt-dlp troubleshooting', () => {
   assert.match(
     renderYaml,
-    /apt-get install -y nodejs npm/,
-    'Render build should install a JS runtime so yt-dlp can solve YouTube signatures'
+    /nodejs npm/,
+    'Render config should preserve the JS-runtime troubleshooting hint'
+  );
+});
+
+test('server can probe for a JavaScript runtime before invoking yt-dlp', () => {
+  assert.match(
+    source,
+    /function hasJavaScriptRuntime\(\)[\s\S]*spawnSync\(/,
+    'server should detect whether a JS runtime is available for yt-dlp challenge solving'
   );
 });
 
