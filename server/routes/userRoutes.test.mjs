@@ -81,6 +81,34 @@ test('cookie decoding normalizes whitespace in YT_DLP_COOKIES_B64', () => {
   );
 });
 
+test('cookie logging checks domains line-by-line instead of relying on a brittle whole-file regex', () => {
+  const body = extractFunctionBody(source, 'function logCookieStatus(cookiesPath, source) {');
+  assert.match(
+    body,
+    /split\(\/\\r\?\\n\/\)/,
+    'cookie logging should inspect cookie rows line by line'
+  );
+  assert.match(
+    body,
+    /fields\[0\]/,
+    'cookie logging should derive the domain from the Netscape cookie columns'
+  );
+});
+
+test('cookie logging reports sample domains and cookie names without values', () => {
+  const body = extractFunctionBody(source, 'function logCookieStatus(cookiesPath, source) {');
+  assert.match(
+    body,
+    /sample domains=/,
+    'cookie logging should include sample domains for debugging'
+  );
+  assert.match(
+    body,
+    /sample cookie names=/,
+    'cookie logging should include sample cookie names for debugging without exposing values'
+  );
+});
+
 test('package render-build still installs yt-dlp', () => {
   assert.match(
     packageJson,

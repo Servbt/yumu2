@@ -90,12 +90,32 @@ function logCookieStatus(cookiesPath, source) {
     const nonCommentLines = content
       .split(/\r?\n/)
       .filter((line) => line.trim() && !line.startsWith('#'));
-    const hasYoutubeCookie = /(^|\t)\.?(youtube|google)\.com\t/i.test(content);
-    const hasAuthCookie = /(SID|LOGIN_INFO|SAPISID|APISID|HSID)/.test(content);
+
+    const parsedRows = nonCommentLines
+      .map((line) => {
+        const fields = line.split(/\t+/);
+        if (fields.length < 7) {
+          return null;
+        }
+
+        return {
+          domain: fields[0],
+          name: fields[5],
+        };
+      })
+      .filter(Boolean);
+
+    const hasYoutubeCookie = parsedRows.some(({ domain }) => /(^|\.)youtube\.com$/i.test(domain));
+    const hasGoogleCookie = parsedRows.some(({ domain }) => /(^|\.)google\.com$/i.test(domain) || /(^|\.)accounts\.google\.com$/i.test(domain));
+    const hasYoutubeOrGoogleCookie = hasYoutubeCookie || hasGoogleCookie;
+    const hasAuthCookie = parsedRows.some(({ name }) => /^(SID|LOGIN_INFO|SAPISID|APISID|HSID|SSID|__Secure-1PAPISID|__Secure-3PAPISID)$/.test(name));
+    const sampleDomains = [...new Set(parsedRows.map(({ domain }) => domain))].slice(0, 8).join(', ');
+    const sampleCookieNames = [...new Set(parsedRows.map(({ name }) => name))].slice(0, 12).join(', ');
 
     console.log(
       `yt-dlp cookies configured from ${source}: ${nonCommentLines.length} cookie rows, ` +
-      `youtube/google domains=${hasYoutubeCookie}, auth-like cookies=${hasAuthCookie}`
+      `youtube/google domains=${hasYoutubeOrGoogleCookie}, auth-like cookies=${hasAuthCookie}, ` +
+      `sample domains=${sampleDomains || 'none'}, sample cookie names=${sampleCookieNames || 'none'}`
     );
   } catch (err) {
     console.warn(`yt-dlp cookies configured from ${source}, but could not be read: ${err.message}`);
