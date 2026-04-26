@@ -45,3 +45,11 @@ test('runYtDlpWithFormat does not force mp4 merge output before later ffmpeg tra
     'yt-dlp invocation should not force mp4 merge output because the file is transcoded later'
   );
 });
+
+test('selector failures trigger a yt-dlp list-formats probe for diagnostics', () => {
+  assert.match(
+    source,
+    /function probeYtDlpFormats\(videoUrl, cookiesPath\)[\s\S]*'--list-formats'/,
+    'selector failures should trigger a list-formats probe for diagnostics'
+  );
+});

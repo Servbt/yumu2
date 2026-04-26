@@ -164,8 +164,14 @@ function runYtDlpWithFormat(videoUrl, outputTemplate, format) {
       reject(error);
     });
 
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       if (code !== 0) {
+        if (stderr.includes('Requested format is not available')) {
+          const availableFormats = await probeYtDlpFormats(videoUrl, cookiesPath);
+          reject(new Error(`${stderr.trim()}\nAvailable formats:\n${availableFormats}`));
+          return;
+        }
+
         reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
         return;
       }
@@ -175,6 +181,40 @@ function runYtDlpWithFormat(videoUrl, outputTemplate, format) {
       } catch (error) {
         reject(error);
       }
+    });
+  });
+}
+
+function probeYtDlpFormats(videoUrl, cookiesPath) {
+  return new Promise((resolve) => {
+    const args = [
+      '-m',
+      'yt_dlp',
+      '--list-formats',
+      ...(cookiesPath ? ['--cookies', cookiesPath] : []),
+      videoUrl,
+    ];
+
+    const child = spawn(process.env.PYTHON_BIN || 'python3', args, {
+      cwd: downloadDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      resolve(`(format probe failed to start: ${error.message})`);
+    });
+
+    child.on('close', () => {
+      const trimmed = output.trim();
+      resolve(trimmed || '(no format list output)');
     });
   });
 }
