@@ -7,6 +7,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import archiver from "archiver";
+import ffmpegPath from "ffmpeg-static";
 
 
 
@@ -16,8 +17,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const downloadDir = path.join(__dirname, 'downloads');
 const desktopDir = path.join(os.homedir(), 'Desktop');
-const ffmpegPath = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
 const downloadStatuses = new Map();
+const skippedVideosBySession = new Map();
 
 function createGoogleOAuthClient() {
   const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
@@ -204,6 +205,17 @@ function clearDownloadStatus(sessionId) {
   });
 }
 
+function setSkippedVideos(sessionId, skippedTitles) {
+  if (!sessionId) {
+    return;
+  }
+  skippedVideosBySession.set(sessionId, [...skippedTitles]);
+}
+
+function getSkippedVideos(sessionId) {
+  return skippedVideosBySession.get(sessionId) || [];
+}
+
 router.get('/download-status', (req, res) => {
   res.json(downloadStatuses.get(req.sessionID) || {
     active: false,
@@ -319,11 +331,6 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
   }
 });
 
-
-
-// Variable to store skipped videos temporarily
-let skippedVideos = [];
-
 router.post('/download-zip', async (req, res) => {
   const { videos } = req.body;
   console.log('Received videos:', videos);
@@ -336,7 +343,8 @@ router.post('/download-zip', async (req, res) => {
     ensureDownloadDir();
 
     const downloadedFiles = [];
-    skippedVideos = []; // Reset skippedVideos for this request
+    const skippedVideos = [];
+    setSkippedVideos(req.sessionID, skippedVideos);
     setDownloadStatus(req.sessionID, {
       active: true,
       mode: 'playlist',
@@ -365,6 +373,7 @@ router.post('/download-zip', async (req, res) => {
         if (err && (err.message.includes('Video unavailable') || err.message.includes('Private video') || err.message.includes('Sign in to confirm'))) {
           console.warn(`Skipping unavailable or unauthorized video: ${videoTitle}`);
           skippedVideos.push(videoTitle);
+          setSkippedVideos(req.sessionID, skippedVideos);
         } else {
           console.error(`Error processing video "${videoTitle}":`, err);
         }
@@ -409,7 +418,7 @@ router.post('/download-zip', async (req, res) => {
 
 // Endpoint to retrieve skipped videos
 router.get('/skipped-videos', (req, res) => {
-  res.json({ skippedVideos });
+  res.json({ skippedVideos: getSkippedVideos(req.sessionID) });
 });
 
 
