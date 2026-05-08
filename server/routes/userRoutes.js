@@ -20,6 +20,30 @@ const desktopDir = path.join(os.homedir(), 'Desktop');
 const downloadStatuses = new Map();
 const skippedVideosBySession = new Map();
 
+function createEmptyProgress() {
+  return {
+    stage: null,
+    percent: null,
+    speed: null,
+    eta: null,
+    total: null,
+  };
+}
+
+function createEmptyDownloadStatus() {
+  return {
+    active: false,
+    mode: null,
+    title: null,
+    message: '',
+    videoId: null,
+    currentIndex: null,
+    totalVideos: null,
+    completedVideos: 0,
+    progress: createEmptyProgress(),
+  };
+}
+
 function createGoogleOAuthClient() {
   const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || (
     process.env.NODE_ENV === 'production'
@@ -59,14 +83,76 @@ function findDownloadedFile(outputTemplate) {
   return matches[0];
 }
 
-function runYtDlp(videoUrl, outputTemplate) {
+function parseYtDlpProgressLine(line) {
+  const cleanLine = line
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .trim();
+
+  if (!cleanLine) {
+    return null;
+  }
+
+  if (cleanLine.includes('[Merger]')) {
+    return {
+      stage: 'merging',
+      percent: 100,
+      speed: null,
+      eta: null,
+      total: null,
+      message: 'Merging video and audio...',
+    };
+  }
+
+  if (cleanLine.includes('has already been downloaded')) {
+    return {
+      stage: 'downloaded',
+      percent: 100,
+      speed: null,
+      eta: null,
+      total: null,
+      message: 'Already downloaded.',
+    };
+  }
+
+  if (cleanLine.includes('[download] Destination:')) {
+    return {
+      stage: 'starting',
+      percent: 0,
+      speed: null,
+      eta: null,
+      total: null,
+      message: 'Starting download...',
+    };
+  }
+
+  const percentMatch = cleanLine.match(/\[download\]\s+([0-9.]+)%/);
+  if (!percentMatch) {
+    return null;
+  }
+
+  const percent = Math.min(100, Math.max(0, Number(percentMatch[1])));
+  const totalMatch = cleanLine.match(/\bof\s+~?\s*([0-9.]+\s*[A-Za-z]+)/);
+  const speedMatch = cleanLine.match(/\bat\s+([^\s]+\/s)/);
+  const etaMatch = cleanLine.match(/\bETA\s+([0-9:]+)/);
+
+  return {
+    stage: percent >= 100 ? 'downloaded' : 'downloading',
+    percent,
+    speed: speedMatch?.[1] || null,
+    eta: etaMatch?.[1] || null,
+    total: totalMatch?.[1]?.replace(/\s+/g, '') || null,
+    message: percent >= 100 ? 'Download finished.' : 'Downloading...',
+  };
+}
+
+function runYtDlp(videoUrl, outputTemplate, onProgress = () => {}) {
   ensureDownloadDir();
 
   return new Promise((resolve, reject) => {
     const args = [
       '-m',
       'yt_dlp',
-      '--no-progress',
+      '--newline',
       '--no-warnings',
       '--format',
       'bv*+ba/b',
@@ -83,8 +169,43 @@ function runYtDlp(videoUrl, outputTemplate) {
     });
 
     let stderr = '';
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+
+    const handleOutput = (chunk, streamName) => {
+      const text = chunk.toString();
+      if (streamName === 'stderr') {
+        stderrBuffer += text;
+      } else {
+        stdoutBuffer += text;
+      }
+
+      const buffer = streamName === 'stderr' ? stderrBuffer : stdoutBuffer;
+      const lines = buffer.split(/\r?\n|\r/);
+      const remaining = lines.pop() || '';
+
+      if (streamName === 'stderr') {
+        stderrBuffer = remaining;
+      } else {
+        stdoutBuffer = remaining;
+      }
+
+      for (const line of lines) {
+        const progress = parseYtDlpProgressLine(line);
+        if (progress) {
+          onProgress(progress);
+        } else if (streamName === 'stderr' && line.trim()) {
+          stderr += `${line}\n`;
+        }
+      }
+    };
+
+    child.stdout.on('data', (chunk) => {
+      handleOutput(chunk, 'stdout');
+    });
+
     child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      handleOutput(chunk, 'stderr');
     });
 
     child.on('error', (error) => {
@@ -92,6 +213,15 @@ function runYtDlp(videoUrl, outputTemplate) {
     });
 
     child.on('close', (code) => {
+      for (const [line, streamName] of [[stdoutBuffer, 'stdout'], [stderrBuffer, 'stderr']]) {
+        const progress = parseYtDlpProgressLine(line);
+        if (progress) {
+          onProgress(progress);
+        } else if (streamName === 'stderr' && line.trim()) {
+          stderr += line;
+        }
+      }
+
       if (code !== 0) {
         reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
         return;
@@ -146,8 +276,86 @@ function transcodeToCompatibleMp4(inputPath, outputPath) {
   });
 }
 
-async function ensureCompatibleVideo(filePath, sanitizedTitle) {
+function getCodecFromFfmpegOutput(output, streamType) {
+  const regex = new RegExp(`Stream #.*${streamType}:\\s*([^,\\s]+)`, 'i');
+  return output.match(regex)?.[1]?.toLowerCase() || null;
+}
+
+function probeMp4Compatibility(inputPath) {
+  return new Promise((resolve) => {
+    const child = spawn(ffmpegPath, [
+      '-hide_banner',
+      '-i',
+      inputPath,
+    ], {
+      cwd: downloadDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk.toString();
+    });
+
+    child.on('error', () => {
+      resolve({
+        compatible: false,
+        videoCodec: null,
+        audioCodec: null,
+      });
+    });
+
+    child.on('close', () => {
+      const videoCodec = getCodecFromFfmpegOutput(output, 'Video');
+      const audioCodec = getCodecFromFfmpegOutput(output, 'Audio');
+      const hasMp4Extension = path.extname(inputPath).toLowerCase() === '.mp4';
+      const hasCompatibleVideo = videoCodec === 'h264';
+      const hasCompatibleAudio = !audioCodec || audioCodec === 'aac';
+
+      resolve({
+        compatible: hasMp4Extension && hasCompatibleVideo && hasCompatibleAudio,
+        videoCodec,
+        audioCodec,
+      });
+    });
+  });
+}
+
+async function ensureCompatibleVideo(filePath, sanitizedTitle, onProgress = () => {}) {
   const compatiblePath = path.join(downloadDir, `${sanitizedTitle}.compatible.mp4`);
+  onProgress({
+    stage: 'checking',
+    percent: null,
+    speed: null,
+    eta: null,
+    total: null,
+    message: 'Checking MP4 compatibility...',
+  });
+
+  const compatibility = await probeMp4Compatibility(filePath);
+  if (compatibility.compatible) {
+    onProgress({
+      stage: 'ready',
+      percent: 100,
+      speed: null,
+      eta: null,
+      total: null,
+      message: 'MP4 already compatible. Skipping finalization...',
+    });
+    return filePath;
+  }
+
+  onProgress({
+    stage: 'converting',
+    percent: null,
+    speed: null,
+    eta: null,
+    total: null,
+    message: 'Finalizing MP4...',
+  });
   await transcodeToCompatibleMp4(filePath, compatiblePath);
 
   if (fs.existsSync(filePath)) {
@@ -184,12 +392,34 @@ function setDownloadStatus(sessionId, status) {
   if (!sessionId) {
     return;
   }
+  const progress = {
+    ...createEmptyProgress(),
+    ...(status.progress || {}),
+  };
   downloadStatuses.set(sessionId, {
-    active: false,
-    mode: null,
-    title: null,
-    message: '',
+    ...createEmptyDownloadStatus(),
     ...status,
+    progress,
+  });
+}
+
+function updateDownloadStatus(sessionId, status) {
+  if (!sessionId) {
+    return;
+  }
+
+  const current = downloadStatuses.get(sessionId) || createEmptyDownloadStatus();
+  const progress = status.progress
+    ? {
+        ...current.progress,
+        ...status.progress,
+      }
+    : current.progress;
+
+  downloadStatuses.set(sessionId, {
+    ...current,
+    ...status,
+    progress,
   });
 }
 
@@ -197,12 +427,7 @@ function clearDownloadStatus(sessionId) {
   if (!sessionId) {
     return;
   }
-  downloadStatuses.set(sessionId, {
-    active: false,
-    mode: null,
-    title: null,
-    message: '',
-  });
+  downloadStatuses.set(sessionId, createEmptyDownloadStatus());
 }
 
 function setSkippedVideos(sessionId, skippedTitles) {
@@ -217,17 +442,12 @@ function getSkippedVideos(sessionId) {
 }
 
 router.get('/download-status', (req, res) => {
-  res.json(downloadStatuses.get(req.sessionID) || {
-    active: false,
-    mode: null,
-    title: null,
-    message: '',
-  });
+  res.json(downloadStatuses.get(req.sessionID) || createEmptyDownloadStatus());
 });
 
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
-  const { videoUrl, videoTitle } = req.body;
+  const { videoUrl, videoTitle, videoId } = req.body;
   console.log('Received video URL:', videoUrl);
   console.log('Received video title:', videoTitle);
 
@@ -242,11 +462,42 @@ router.post('/download', async (req, res, next) => {
       active: true,
       mode: 'single',
       title: videoTitle,
+      videoId: videoId || null,
       message: `Downloading ${videoTitle}`,
+      progress: {
+        stage: 'starting',
+        percent: 0,
+      },
     });
     const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
-    const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
-    const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
+    const downloadedPath = await runYtDlp(videoUrl, outputTemplate, (progress) => {
+      updateDownloadStatus(req.sessionID, {
+        active: true,
+        mode: 'single',
+        title: videoTitle,
+        videoId: videoId || null,
+        message: progress.message || `Downloading ${videoTitle}`,
+        progress,
+      });
+    });
+    const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle, (progress) => {
+      updateDownloadStatus(req.sessionID, {
+        active: true,
+        mode: 'single',
+        title: videoTitle,
+        videoId: videoId || null,
+        message: progress.message || 'Finalizing MP4...',
+        progress,
+      });
+    });
+
+    updateDownloadStatus(req.sessionID, {
+      message: 'Ready to save...',
+      progress: {
+        stage: 'ready',
+        percent: 100,
+      },
+    });
 
     // Set the Content-Disposition header with the correct filename
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.mp4"`);
@@ -332,7 +583,7 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
 });
 
 router.post('/download-zip', async (req, res) => {
-  const { videos } = req.body;
+  const { videos, zipName } = req.body;
   console.log('Received videos:', videos);
 
   if (!videos || !Array.isArray(videos) || videos.length === 0) {
@@ -344,30 +595,82 @@ router.post('/download-zip', async (req, res) => {
 
     const downloadedFiles = [];
     const skippedVideos = [];
+    const archiveFileName = createZipFileName(zipName);
     setSkippedVideos(req.sessionID, skippedVideos);
     setDownloadStatus(req.sessionID, {
       active: true,
       mode: 'playlist',
       title: null,
       message: 'Preparing playlist download...',
+      currentIndex: null,
+      totalVideos: videos.length,
+      completedVideos: 0,
+      progress: {
+        stage: 'preparing',
+        percent: null,
+      },
     });
 
-    for (const video of videos) {
+    for (const [index, video] of videos.entries()) {
       const { videoUrl, videoTitle } = video;
       console.log(`Processing video: ${videoTitle}`);
+      const currentIndex = index + 1;
+      const playlistFileBaseName = createPlaylistVideoFileBaseName(
+        videoTitle,
+        video.playlistIndex || currentIndex,
+        video.playlistTotalVideos || videos.length,
+      );
 
       try {
         setDownloadStatus(req.sessionID, {
           active: true,
           mode: 'playlist',
           title: videoTitle,
-          message: `Downloading ${videoTitle}`,
+          videoId: video.videoId || null,
+          currentIndex,
+          totalVideos: videos.length,
+          completedVideos: downloadedFiles.length,
+          message: `Downloading ${currentIndex} of ${videos.length}: ${videoTitle}`,
+          progress: {
+            stage: 'starting',
+            percent: 0,
+          },
         });
-        const sanitizedTitle = sanitizeFileName(videoTitle);
-        const outputTemplate = path.join(downloadDir, `${sanitizedTitle}.%(ext)s`);
-        const downloadedPath = await runYtDlp(videoUrl, outputTemplate);
-        const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle);
-        downloadedFiles.push({ path: outputFilePath, name: `${sanitizedTitle}.mp4` });
+        const outputTemplate = path.join(downloadDir, `${playlistFileBaseName}.%(ext)s`);
+        const downloadedPath = await runYtDlp(videoUrl, outputTemplate, (progress) => {
+          updateDownloadStatus(req.sessionID, {
+            active: true,
+            mode: 'playlist',
+            title: videoTitle,
+            videoId: video.videoId || null,
+            currentIndex,
+            totalVideos: videos.length,
+            completedVideos: downloadedFiles.length,
+            message: progress.message || `Downloading ${currentIndex} of ${videos.length}: ${videoTitle}`,
+            progress,
+          });
+        });
+        const outputFilePath = await ensureCompatibleVideo(downloadedPath, playlistFileBaseName, (progress) => {
+          updateDownloadStatus(req.sessionID, {
+            active: true,
+            mode: 'playlist',
+            title: videoTitle,
+            videoId: video.videoId || null,
+            currentIndex,
+            totalVideos: videos.length,
+            completedVideos: downloadedFiles.length,
+            message: progress.message || 'Finalizing MP4...',
+            progress,
+          });
+        });
+        downloadedFiles.push({ path: outputFilePath, name: `${playlistFileBaseName}.mp4` });
+        updateDownloadStatus(req.sessionID, {
+          completedVideos: downloadedFiles.length,
+          progress: {
+            stage: 'complete',
+            percent: 100,
+          },
+        });
 
       } catch (err) {
         if (err && (err.message.includes('Video unavailable') || err.message.includes('Private video') || err.message.includes('Sign in to confirm'))) {
@@ -387,9 +690,16 @@ router.post('/download-zip', async (req, res) => {
       mode: 'playlist',
       title: null,
       message: 'Creating playlist ZIP...',
+      currentIndex: null,
+      totalVideos: videos.length,
+      completedVideos: downloadedFiles.length,
+      progress: {
+        stage: 'zipping',
+        percent: null,
+      },
     });
     const archive = archiver('zip', { zlib: { level: 9 } });
-    res.setHeader('Content-Disposition', `attachment; filename="playlist_videos.zip"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${archiveFileName}"`);
     res.setHeader('Content-Type', 'application/zip');
 
     archive.pipe(res);
@@ -421,6 +731,32 @@ router.get('/skipped-videos', (req, res) => {
   res.json({ skippedVideos: getSkippedVideos(req.sessionID) });
 });
 
+
+function createZipFileName(fileName) {
+  const sanitizedName = sanitizeFileName(fileName || 'playlist_videos.zip')
+    .trim()
+    .replace(/\s+/g, ' ');
+  const withoutExtension = sanitizedName.toLowerCase().endsWith('.zip')
+    ? sanitizedName.slice(0, -4).trim()
+    : sanitizedName;
+
+  return `${withoutExtension || 'playlist_videos'}.zip`;
+}
+
+function createPlaylistVideoFileBaseName(videoTitle, playlistIndex, totalVideos) {
+  const sanitizedTitle = sanitizeFileName(videoTitle);
+  const parsedIndex = Number.parseInt(playlistIndex, 10);
+  const parsedTotal = Number.parseInt(totalVideos, 10);
+
+  if (!Number.isFinite(parsedIndex) || parsedIndex < 1) {
+    return sanitizedTitle;
+  }
+
+  const indexWidth = Number.isFinite(parsedTotal) && parsedTotal > 0
+    ? String(parsedTotal).length
+    : String(parsedIndex).length;
+  return `${String(parsedIndex).padStart(indexWidth, '0')} - ${sanitizedTitle}`;
+}
 
 // Helper function to sanitize file names
 function sanitizeFileName(fileName) {

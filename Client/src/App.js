@@ -1,7 +1,127 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 // import VideoDownloader from './components/video-downloader';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
+
+const createEmptyDownloadStatus = () => ({
+  active: false,
+  mode: null,
+  title: null,
+  message: '',
+  videoId: null,
+  currentIndex: null,
+  totalVideos: null,
+  completedVideos: 0,
+  progress: {
+    stage: null,
+    percent: null,
+    speed: null,
+    eta: null,
+    total: null,
+  },
+});
+
+const getProgressPercent = (progress) => (
+  Number.isFinite(progress?.percent)
+    ? Math.max(0, Math.min(100, Math.round(progress.percent)))
+    : null
+);
+
+const isStatusForVideo = (status, video) => {
+  if (!status?.active || !video) {
+    return false;
+  }
+
+  if (status.videoId) {
+    return status.videoId === video.id;
+  }
+
+  return status.title === video.title;
+};
+
+const PLAYLIST_PART_SIZE_PRESETS = [25, 50, 100];
+
+const normalizePartSize = (value, fallback = 50) => {
+  const parsedValue = Number.parseInt(value, 10);
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : fallback;
+};
+
+const splitVideosIntoParts = (videos, partSize) => {
+  const normalizedPartSize = normalizePartSize(partSize);
+  const parts = [];
+
+  for (let startIndex = 0; startIndex < videos.length; startIndex += normalizedPartSize) {
+    const endIndex = Math.min(startIndex + normalizedPartSize, videos.length);
+    parts.push({
+      index: parts.length + 1,
+      startIndex,
+      endIndex,
+      videos: videos.slice(startIndex, endIndex),
+    });
+  }
+
+  return parts;
+};
+
+const formatPartNumber = (value, total) => (
+  String(value).padStart(String(total).length, '0')
+);
+
+const buildPlaylistZipName = (playlistTitle, suffix) => {
+  const baseName = playlistTitle?.trim() || 'playlist_videos';
+  return suffix ? `${baseName}-${suffix}.zip` : `${baseName}.zip`;
+};
+
+const getResponseFilename = (response, fallbackFilename) => {
+  const contentDisposition = response.headers.get('content-disposition');
+  const quotedMatch = contentDisposition?.match(/filename="([^"]+)"/i);
+  const plainMatch = contentDisposition?.match(/filename=([^;]+)/i);
+  return (quotedMatch?.[1] || plainMatch?.[1] || fallbackFilename).trim();
+};
+
+const saveBlobResponse = async (response, fallbackFilename) => {
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = getResponseFilename(response, fallbackFilename);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(downloadUrl);
+};
+
+function DownloadProgress({ status, compact = false }) {
+  const percent = getProgressPercent(status.progress);
+  const isIndeterminate = percent === null;
+  const meta = [
+    percent !== null ? `${percent}%` : status.message,
+    status.progress?.speed,
+    status.progress?.eta ? `ETA ${status.progress.eta}` : null,
+    status.progress?.total,
+  ].filter(Boolean);
+
+  return (
+    <div className={compact ? 'download-progress compact' : 'download-progress'}>
+      <div
+        className={`download-progress-track ${isIndeterminate ? 'is-indeterminate' : ''}`}
+        aria-label="Download progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+        role="progressbar"
+      >
+        <div
+          className="download-progress-fill"
+          style={{ width: isIndeterminate ? '45%' : `${percent}%` }}
+        />
+      </div>
+      <div className="download-progress-meta">
+        {meta.join(' | ')}
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -40,15 +160,17 @@ function App() {
     window.location.href = `${baseURL}/auth/google`;
   };
 
+  const handleAuthExpired = useCallback((message) => {
+    setIsAuthenticated(false);
+    setAuthMessage(message || 'Please sign in again.');
+  }, []);
+
   return (
     <div>
       <div className="container mt-5">
         {isAuthenticated ? (
           <Playlists
-            onAuthExpired={(message) => {
-              setIsAuthenticated(false);
-              setAuthMessage(message || 'Please sign in again.');
-            }}
+            onAuthExpired={handleAuthExpired}
           />
         ) : (
           <div className="hero">
@@ -91,17 +213,16 @@ function Playlists({ onAuthExpired }) {
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [videos, setVideos] = useState([]);
-  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [activePlaylistDownloadKey, setActivePlaylistDownloadKey] = useState(null);
+  const [playlistPartSize, setPlaylistPartSize] = useState(50);
   const [downloadingVideos, setDownloadingVideos] = useState([]);
   const [errorVideos, setErrorVideos] = useState([]); // State to track videos with errors
   const [playlistError, setPlaylistError] = useState('');
   const [skippedVideos, setSkippedVideos] = useState([]);
-  const [downloadStatus, setDownloadStatus] = useState({
-    active: false,
-    mode: null,
-    title: null,
-    message: '',
-  });
+  const [downloadStatus, setDownloadStatus] = useState(createEmptyDownloadStatus);
+  const selectedPlaylistDetails = playlists.find((playlist) => playlist.id === selectedPlaylist);
+  const playlistParts = splitVideosIntoParts(videos, playlistPartSize);
+  const isDownloadingPlaylist = Boolean(activePlaylistDownloadKey);
 
   useEffect(() => {
     fetch('/api/playlists', {
@@ -136,16 +257,11 @@ function Playlists({ onAuthExpired }) {
         setPlaylists([]);
         setPlaylistError('Unable to load playlists right now.');
       });
-  }, []);
+  }, [onAuthExpired]);
 
   useEffect(() => {
-    if (!isDownloadingAll && downloadingVideos.length === 0) {
-      setDownloadStatus({
-        active: false,
-        mode: null,
-        title: null,
-        message: '',
-      });
+    if (!isDownloadingPlaylist && downloadingVideos.length === 0) {
+      setDownloadStatus(createEmptyDownloadStatus());
       return undefined;
     }
 
@@ -165,6 +281,17 @@ function Playlists({ onAuthExpired }) {
             mode: data?.mode || null,
             title: data?.title || null,
             message: data?.message || '',
+            videoId: data?.videoId || null,
+            currentIndex: data?.currentIndex || null,
+            totalVideos: data?.totalVideos || null,
+            completedVideos: data?.completedVideos || 0,
+            progress: {
+              stage: data?.progress?.stage || null,
+              percent: Number.isFinite(data?.progress?.percent) ? data.progress.percent : null,
+              speed: data?.progress?.speed || null,
+              eta: data?.progress?.eta || null,
+              total: data?.progress?.total || null,
+            },
           });
         })
         .catch(error => {
@@ -175,7 +302,7 @@ function Playlists({ onAuthExpired }) {
     pollStatus();
     const intervalId = window.setInterval(pollStatus, 1000);
     return () => window.clearInterval(intervalId);
-  }, [isDownloadingAll, downloadingVideos]);
+  }, [isDownloadingPlaylist, downloadingVideos]);
 
   const fetchVideos = (playlistId) => {
     fetch(`/api/playlist/${playlistId}/videos`, {
@@ -233,7 +360,18 @@ function Playlists({ onAuthExpired }) {
           active: true,
           mode: 'single',
           title: videoTitle,
+          videoId,
           message: `Downloading ${videoTitle}`,
+          currentIndex: null,
+          totalVideos: null,
+          completedVideos: 0,
+          progress: {
+            stage: 'starting',
+            percent: 0,
+            speed: null,
+            eta: null,
+            total: null,
+          },
         });
     
 
@@ -243,21 +381,11 @@ function Playlists({ onAuthExpired }) {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle }),
+            body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle, videoId }),
           });
     
           if (!response.ok) throw new Error('Failed to download video');
-          const blob = await response.blob();
-    
-          // Download the video
-          const downloadUrl = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = `${videoTitle}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(downloadUrl);
+          await saveBlobResponse(response, `${videoTitle}.mp4`);
         } catch (error) {
           console.error(`Error downloading video "${videoTitle}":`, error);
     
@@ -268,54 +396,102 @@ function Playlists({ onAuthExpired }) {
           setDownloadingVideos((prev) => prev.filter((id) => id !== videoId));
           setDownloadStatus((prev) => (
             prev.mode === 'single' && prev.title === videoTitle
-              ? { active: false, mode: null, title: null, message: '' }
+              ? createEmptyDownloadStatus()
               : prev
           ));
         }
       };
   
-      const downloadAllVideos = async () => {
-        if (videos.length === 0) return;
-    
-        setIsDownloadingAll(true);
-        setErrorVideos([]); // Clear any previous errors before downloading all videos
+      const downloadPlaylistVideos = async ({
+        batchVideos,
+        downloadKey,
+        startIndex = 0,
+        statusMessage = 'Preparing playlist download...',
+        zipName = 'playlist_videos.zip',
+      }) => {
+        if (batchVideos.length === 0) return;
+
+        setActivePlaylistDownloadKey(downloadKey);
+        setErrorVideos([]); // Clear any previous errors before downloading playlist videos
         setSkippedVideos([]);
         setDownloadStatus({
           active: true,
           mode: 'playlist',
           title: null,
-          message: 'Preparing playlist download...',
+          message: statusMessage,
+          videoId: null,
+          currentIndex: null,
+          totalVideos: batchVideos.length,
+          completedVideos: 0,
+          progress: {
+            stage: 'preparing',
+            percent: null,
+            speed: null,
+            eta: null,
+            total: null,
+          },
         });
-    
+
         try {
           const response = await fetch('/api/download-zip', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ videos: videos.map(video => ({ videoUrl: `https://www.youtube.com/watch?v=${video.id}`, videoTitle: video.title })) }),
+            body: JSON.stringify({
+              zipName,
+              videos: batchVideos.map((video, index) => ({
+                videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
+                videoTitle: video.title,
+                videoId: video.id,
+                playlistIndex: startIndex + index + 1,
+                playlistTotalVideos: videos.length,
+              })),
+            }),
           });
-    
+
           if (!response.ok) throw new Error('Failed to download ZIP file');
-    
-          const blob = await response.blob();
-          const downloadUrl = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = 'playlist_videos.zip';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(downloadUrl);
+          await saveBlobResponse(response, zipName);
         } catch (error) {
           console.error('Error downloading ZIP file:', error);
         } finally {
           refreshSkippedVideos();
-          setIsDownloadingAll(false);
-          setDownloadStatus({ active: false, mode: null, title: null, message: '' });
+          setActivePlaylistDownloadKey(null);
+          setDownloadStatus(createEmptyDownloadStatus());
         }
       };
+
+      const downloadAllVideos = async () => {
+        await downloadPlaylistVideos({
+          batchVideos: videos,
+          downloadKey: 'all',
+          zipName: buildPlaylistZipName(selectedPlaylistDetails?.title, 'full-playlist'),
+        });
+      };
+
+      const downloadPlaylistPart = async (part) => {
+        const totalParts = playlistParts.length;
+        const partNumber = formatPartNumber(part.index, totalParts);
+        const totalPartNumber = formatPartNumber(totalParts, totalParts);
+
+        await downloadPlaylistVideos({
+          batchVideos: part.videos,
+          downloadKey: `part-${part.index}`,
+          startIndex: part.startIndex,
+          statusMessage: `Preparing part ${part.index} of ${totalParts}...`,
+          zipName: buildPlaylistZipName(
+            selectedPlaylistDetails?.title,
+            `part-${partNumber}-of-${totalPartNumber}`,
+          ),
+        });
+      };
   
+  const playlistProgressText = downloadStatus.mode === 'playlist' && downloadStatus.totalVideos
+    ? `${downloadStatus.completedVideos || 0}/${downloadStatus.totalVideos} saved`
+    : '';
+  const playlistPartSummaryText = videos.length
+    ? `${videos.length} videos | ${playlistParts.length} ZIP${playlistParts.length === 1 ? '' : 's'}`
+    : '';
   
   return (
     <div className="d-flex flex-row container left-container">
@@ -343,17 +519,93 @@ function Playlists({ onAuthExpired }) {
       <div className="videos-container fade-in">
         <h2 className='row ps-2' style={{ color: '#F72585' }}>Videos in Playlist</h2>
         {downloadStatus.active && (
-          <p className="select mb-3">
-            {downloadStatus.title
-              ? `Now downloading: ${downloadStatus.title}`
-              : downloadStatus.message}
-          </p>
+          <div className="download-status-panel mb-3" aria-live="polite">
+            <div className="download-status-heading">
+              <span>
+                {downloadStatus.title
+                  ? `Now downloading: ${downloadStatus.title}`
+                  : downloadStatus.message}
+              </span>
+              {playlistProgressText && (
+                <span className="download-status-count">{playlistProgressText}</span>
+              )}
+            </div>
+            <DownloadProgress status={downloadStatus} />
+          </div>
         )}
         {selectedPlaylist && videos.length > 0 ? (
           <>
-            <button className="btn btn-success mb-3" onClick={downloadAllVideos} disabled={isDownloadingAll}>
-              {isDownloadingAll ? 'Downloading...' : 'Download All Videos'}
-            </button>
+            <div className="playlist-actions mb-3">
+              <button
+                className="btn btn-success playlist-download-all"
+                onClick={downloadAllVideos}
+                disabled={isDownloadingPlaylist}
+              >
+                {activePlaylistDownloadKey === 'all' ? 'Downloading...' : 'Download All Videos'}
+              </button>
+
+              <div className="playlist-split-panel">
+                <div className="playlist-split-header">
+                  <div>
+                    <h3>Playlist parts</h3>
+                    <span>{playlistPartSummaryText}</span>
+                  </div>
+                  <div className="playlist-part-size">
+                    <span>Videos per part</span>
+                    <div className="playlist-part-size-controls">
+                      <div className="playlist-part-size-presets" role="group" aria-label="Videos per part">
+                        {PLAYLIST_PART_SIZE_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`playlist-size-preset ${playlistPartSize === preset ? 'is-active' : ''}`}
+                            onClick={() => setPlaylistPartSize(preset)}
+                            disabled={isDownloadingPlaylist}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        aria-label="Custom videos per part"
+                        className="playlist-part-size-input"
+                        max={Math.max(videos.length, 1)}
+                        min="1"
+                        onChange={(event) => setPlaylistPartSize(normalizePartSize(event.target.value))}
+                        type="number"
+                        value={playlistPartSize}
+                        disabled={isDownloadingPlaylist}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="playlist-part-grid">
+                  {playlistParts.map((part) => {
+                    const partKey = `part-${part.index}`;
+                    const isPartDownloading = activePlaylistDownloadKey === partKey;
+
+                    return (
+                      <button
+                        key={`${partKey}-${part.startIndex}`}
+                        type="button"
+                        className={`playlist-part-button ${isPartDownloading ? 'is-active' : ''}`}
+                        onClick={() => downloadPlaylistPart(part)}
+                        disabled={isDownloadingPlaylist}
+                      >
+                        <span className="playlist-part-title">
+                          {isPartDownloading
+                            ? 'Downloading...'
+                            : `Part ${formatPartNumber(part.index, playlistParts.length)}`}
+                        </span>
+                        <span className="playlist-part-range">
+                          Videos {part.startIndex + 1}-{part.endIndex}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             {skippedVideos.length > 0 && (
               <details className="mb-3">
                 <summary className="select">
@@ -369,23 +621,30 @@ function Playlists({ onAuthExpired }) {
               </details>
             )}
             <div className="list-group">
-              {videos.map((video, index) => (
-                <div key={video.id} className="list-group-item d-flex align-items-center fade-in">
-                  <img src={video.thumbnail} alt={`${video.title} Thumbnail`} className="img-thumbnail mr-3" style={{ width: '80px' }} />
-                  <div className="flex-grow-1 p-2">{video.title}</div>
-                  <button
-                    className={`btn ml-auto col-3 ${errorVideos.includes(video.id) ? 'btn-danger' : 'btn-primary'}`}
-                    onClick={() => downloadVideo(video.id, video.title)}
-                    disabled={downloadingVideos.includes(video.id)} // Disable button while downloading
-                  >
-                    {downloadingVideos.includes(video.id)
-                      ? 'Downloading...'
-                      : errorVideos.includes(video.id)
-                      ? 'Unavailable'
-                      : 'Download Video'}
-                  </button>
-                </div>
-              ))}
+              {videos.map((video, index) => {
+                const isActiveVideo = isStatusForVideo(downloadStatus, video);
+
+                return (
+                  <div key={video.id} className={`list-group-item video-list-item d-flex align-items-center fade-in ${isActiveVideo ? 'is-active-download' : ''}`}>
+                    <img src={video.thumbnail} alt={`${video.title} Thumbnail`} className="img-thumbnail mr-3 video-thumbnail" />
+                    <div className="video-details flex-grow-1 p-2">
+                      <div>{video.title}</div>
+                      {isActiveVideo && <DownloadProgress status={downloadStatus} compact />}
+                    </div>
+                    <button
+                      className={`btn ml-auto video-download-button ${errorVideos.includes(video.id) ? 'btn-danger' : 'btn-primary'}`}
+                      onClick={() => downloadVideo(video.id, video.title)}
+                      disabled={downloadingVideos.includes(video.id) || isDownloadingPlaylist} // Disable button while downloading
+                    >
+                      {downloadingVideos.includes(video.id)
+                        ? 'Downloading...'
+                        : errorVideos.includes(video.id)
+                        ? 'Unavailable'
+                        : 'Download Video'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </>
         ) : (
