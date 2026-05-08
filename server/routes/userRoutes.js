@@ -19,6 +19,18 @@ const downloadDir = path.join(__dirname, 'downloads');
 const desktopDir = path.join(os.homedir(), 'Desktop');
 const downloadStatuses = new Map();
 const skippedVideosBySession = new Map();
+const DOWNLOAD_MODE_BEST = 'best';
+const DOWNLOAD_MODE_FAST_MP4 = 'fast-mp4';
+const DOWNLOAD_FORMATS = {
+  [DOWNLOAD_MODE_BEST]: 'bv*+ba/b',
+  [DOWNLOAD_MODE_FAST_MP4]: [
+    'bv*[vcodec^=avc1][ext=mp4]+ba[acodec^=mp4a][ext=m4a]',
+    'b[vcodec^=avc1][acodec^=mp4a][ext=mp4]',
+    'bv*[vcodec^=avc1]+ba[acodec^=mp4a]',
+    'b[vcodec^=avc1][acodec^=mp4a]',
+    'bv*+ba/b',
+  ].join('/'),
+};
 
 function createEmptyProgress() {
   return {
@@ -37,11 +49,22 @@ function createEmptyDownloadStatus() {
     title: null,
     message: '',
     videoId: null,
+    downloadMode: DOWNLOAD_MODE_BEST,
     currentIndex: null,
     totalVideos: null,
     completedVideos: 0,
     progress: createEmptyProgress(),
   };
+}
+
+function normalizeDownloadMode(downloadMode) {
+  return downloadMode === DOWNLOAD_MODE_FAST_MP4
+    ? DOWNLOAD_MODE_FAST_MP4
+    : DOWNLOAD_MODE_BEST;
+}
+
+function getYtDlpFormat(downloadMode) {
+  return DOWNLOAD_FORMATS[normalizeDownloadMode(downloadMode)];
 }
 
 function createGoogleOAuthClient() {
@@ -145,7 +168,7 @@ function parseYtDlpProgressLine(line) {
   };
 }
 
-function runYtDlp(videoUrl, outputTemplate, onProgress = () => {}) {
+function runYtDlp(videoUrl, outputTemplate, onProgress = () => {}, downloadMode = DOWNLOAD_MODE_BEST) {
   ensureDownloadDir();
 
   return new Promise((resolve, reject) => {
@@ -155,7 +178,7 @@ function runYtDlp(videoUrl, outputTemplate, onProgress = () => {}) {
       '--newline',
       '--no-warnings',
       '--format',
-      'bv*+ba/b',
+      getYtDlpFormat(downloadMode),
       '--merge-output-format',
       'mp4',
       '--output',
@@ -448,6 +471,7 @@ router.get('/download-status', (req, res) => {
 // Endpoint to handle video download requests
 router.post('/download', async (req, res, next) => {
   const { videoUrl, videoTitle, videoId } = req.body;
+  const downloadMode = normalizeDownloadMode(req.body.downloadMode);
   console.log('Received video URL:', videoUrl);
   console.log('Received video title:', videoTitle);
 
@@ -463,6 +487,7 @@ router.post('/download', async (req, res, next) => {
       mode: 'single',
       title: videoTitle,
       videoId: videoId || null,
+      downloadMode,
       message: `Downloading ${videoTitle}`,
       progress: {
         stage: 'starting',
@@ -476,16 +501,18 @@ router.post('/download', async (req, res, next) => {
         mode: 'single',
         title: videoTitle,
         videoId: videoId || null,
+        downloadMode,
         message: progress.message || `Downloading ${videoTitle}`,
         progress,
       });
-    });
+    }, downloadMode);
     const outputFilePath = await ensureCompatibleVideo(downloadedPath, sanitizedTitle, (progress) => {
       updateDownloadStatus(req.sessionID, {
         active: true,
         mode: 'single',
         title: videoTitle,
         videoId: videoId || null,
+        downloadMode,
         message: progress.message || 'Finalizing MP4...',
         progress,
       });
@@ -584,6 +611,7 @@ router.get('/playlist/:playlistId/videos', async (req, res) => {
 
 router.post('/download-zip', async (req, res) => {
   const { videos, zipName } = req.body;
+  const downloadMode = normalizeDownloadMode(req.body.downloadMode);
   console.log('Received videos:', videos);
 
   if (!videos || !Array.isArray(videos) || videos.length === 0) {
@@ -601,6 +629,7 @@ router.post('/download-zip', async (req, res) => {
       active: true,
       mode: 'playlist',
       title: null,
+      downloadMode,
       message: 'Preparing playlist download...',
       currentIndex: null,
       totalVideos: videos.length,
@@ -627,6 +656,7 @@ router.post('/download-zip', async (req, res) => {
           mode: 'playlist',
           title: videoTitle,
           videoId: video.videoId || null,
+          downloadMode,
           currentIndex,
           totalVideos: videos.length,
           completedVideos: downloadedFiles.length,
@@ -643,19 +673,21 @@ router.post('/download-zip', async (req, res) => {
             mode: 'playlist',
             title: videoTitle,
             videoId: video.videoId || null,
+            downloadMode,
             currentIndex,
             totalVideos: videos.length,
             completedVideos: downloadedFiles.length,
             message: progress.message || `Downloading ${currentIndex} of ${videos.length}: ${videoTitle}`,
             progress,
           });
-        });
+        }, downloadMode);
         const outputFilePath = await ensureCompatibleVideo(downloadedPath, playlistFileBaseName, (progress) => {
           updateDownloadStatus(req.sessionID, {
             active: true,
             mode: 'playlist',
             title: videoTitle,
             videoId: video.videoId || null,
+            downloadMode,
             currentIndex,
             totalVideos: videos.length,
             completedVideos: downloadedFiles.length,
@@ -689,6 +721,7 @@ router.post('/download-zip', async (req, res) => {
       active: true,
       mode: 'playlist',
       title: null,
+      downloadMode,
       message: 'Creating playlist ZIP...',
       currentIndex: null,
       totalVideos: videos.length,

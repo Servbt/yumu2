@@ -142,6 +142,52 @@
     gap: 12px;
   }
 
+  .download-mode-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(76, 201, 240, 0.35);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #101010;
+  }
+
+  .download-mode-panel > span {
+    color: #4CC9F0;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .download-mode-options {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid rgba(247, 37, 133, 0.35);
+    border-radius: 8px;
+  }
+
+  .download-mode-option {
+    min-width: 116px;
+    min-height: 36px;
+    border: 0;
+    border-right: 1px solid rgba(247, 37, 133, 0.25);
+    background: #1a1a1a;
+    color: #ffffff;
+    font-weight: 700;
+    padding: 0 12px;
+  }
+
+  .download-mode-option:last-child {
+    border-right: 0;
+  }
+
+  .download-mode-option:hover:not(:disabled),
+  .download-mode-option.is-active {
+    background: #F72585;
+    color: #ffffff;
+  }
+
   .playlist-download-all {
     align-self: flex-start;
     min-height: 40px;
@@ -258,7 +304,8 @@
 
   .playlist-part-button:disabled,
   .playlist-size-preset:disabled,
-  .playlist-part-size-input:disabled {
+  .playlist-part-size-input:disabled,
+  .download-mode-option:disabled {
     cursor: not-allowed;
     opacity: 0.65;
   }
@@ -569,6 +616,20 @@
     .download-status-heading {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .download-mode-panel {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .download-mode-options {
+      width: 100%;
+    }
+
+    .download-mode-option {
+      flex: 1;
+      min-width: 0;
     }
 
     .playlist-download-all,

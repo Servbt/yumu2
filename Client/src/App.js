@@ -9,6 +9,7 @@ const createEmptyDownloadStatus = () => ({
   title: null,
   message: '',
   videoId: null,
+  downloadMode: 'best',
   currentIndex: null,
   totalVideos: null,
   completedVideos: 0,
@@ -40,6 +41,10 @@ const isStatusForVideo = (status, video) => {
 };
 
 const PLAYLIST_PART_SIZE_PRESETS = [25, 50, 100];
+const DOWNLOAD_MODES = [
+  { value: 'fast-mp4', label: 'Fast MP4' },
+  { value: 'best', label: 'Best Quality' },
+];
 
 const normalizePartSize = (value, fallback = 50) => {
   const parsedValue = Number.parseInt(value, 10);
@@ -215,6 +220,7 @@ function Playlists({ onAuthExpired }) {
   const [videos, setVideos] = useState([]);
   const [activePlaylistDownloadKey, setActivePlaylistDownloadKey] = useState(null);
   const [playlistPartSize, setPlaylistPartSize] = useState(50);
+  const [downloadMode, setDownloadMode] = useState('fast-mp4');
   const [downloadingVideos, setDownloadingVideos] = useState([]);
   const [errorVideos, setErrorVideos] = useState([]); // State to track videos with errors
   const [playlistError, setPlaylistError] = useState('');
@@ -282,6 +288,7 @@ function Playlists({ onAuthExpired }) {
             title: data?.title || null,
             message: data?.message || '',
             videoId: data?.videoId || null,
+            downloadMode: data?.downloadMode || 'best',
             currentIndex: data?.currentIndex || null,
             totalVideos: data?.totalVideos || null,
             completedVideos: data?.completedVideos || 0,
@@ -361,6 +368,7 @@ function Playlists({ onAuthExpired }) {
           mode: 'single',
           title: videoTitle,
           videoId,
+          downloadMode,
           message: `Downloading ${videoTitle}`,
           currentIndex: null,
           totalVideos: null,
@@ -381,7 +389,7 @@ function Playlists({ onAuthExpired }) {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle, videoId }),
+            body: JSON.stringify({ videoUrl: `https://www.youtube.com/watch?v=${videoId}`, videoTitle, videoId, downloadMode }),
           });
     
           if (!response.ok) throw new Error('Failed to download video');
@@ -420,6 +428,7 @@ function Playlists({ onAuthExpired }) {
           title: null,
           message: statusMessage,
           videoId: null,
+          downloadMode,
           currentIndex: null,
           totalVideos: batchVideos.length,
           completedVideos: 0,
@@ -440,6 +449,7 @@ function Playlists({ onAuthExpired }) {
             },
             body: JSON.stringify({
               zipName,
+              downloadMode,
               videos: batchVideos.map((video, index) => ({
                 videoUrl: `https://www.youtube.com/watch?v=${video.id}`,
                 videoTitle: video.title,
@@ -492,6 +502,7 @@ function Playlists({ onAuthExpired }) {
   const playlistPartSummaryText = videos.length
     ? `${videos.length} videos | ${playlistParts.length} ZIP${playlistParts.length === 1 ? '' : 's'}`
     : '';
+  const isDownloadModeLocked = isDownloadingPlaylist || downloadingVideos.length > 0;
   
   return (
     <div className="d-flex flex-row container left-container">
@@ -536,6 +547,24 @@ function Playlists({ onAuthExpired }) {
         {selectedPlaylist && videos.length > 0 ? (
           <>
             <div className="playlist-actions mb-3">
+              <div className="download-mode-panel">
+                <span>Download mode</span>
+                <div className="download-mode-options" role="group" aria-label="Download mode">
+                  {DOWNLOAD_MODES.map((mode) => (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      aria-pressed={downloadMode === mode.value}
+                      className={`download-mode-option ${downloadMode === mode.value ? 'is-active' : ''}`}
+                      onClick={() => setDownloadMode(mode.value)}
+                      disabled={isDownloadModeLocked}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button
                 className="btn btn-success playlist-download-all"
                 onClick={downloadAllVideos}
